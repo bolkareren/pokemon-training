@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
@@ -85,7 +86,15 @@ def create_data_loaders(data_dir, val_size=0.1, test_size=0.1, batch_size=16, ra
         random_state=random_state,
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    # Pin the shuffle to its own generator seeded with random_state so epoch
+    # ordering is reproducible and independent of global-RNG consumption order.
+    shuffle_generator = torch.Generator().manual_seed(random_state)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=shuffle_generator,
+    )
     val_loader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
 

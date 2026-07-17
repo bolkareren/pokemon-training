@@ -16,6 +16,8 @@ class ExperimentConfig:
     batch_size: int = 16
     val_size: float = 0.1
     test_size: float = 0.1
+    # Single global seed for the run: the stratified split, all RNGs
+    # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
     random_state: int = 42
 
     # Model
