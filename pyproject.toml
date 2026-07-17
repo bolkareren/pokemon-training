@@ -1,0 +1,29 @@
+[project]
+name = "pokemon-training"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4",
+    "marimo",
+    "mlflow<3",
+    "numpy",
+    "opencv-python",
+    "pillow",
+    "requests",
+    "ruff>=0.15.13",
+    "scikit-learn",
+    "torch",
+    "torchvision",
+    "tyro>=1.0.15",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

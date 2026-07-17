@@ -1,0 +1,11 @@
+.venv/
+.vscode/
+__pycache__/
+*.pyc
+runs/
+mlruns/
+mlflow.db
+
+raw_data/*
+data/*
+*.DS_Store
