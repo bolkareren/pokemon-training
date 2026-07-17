@@ -4,6 +4,13 @@ from torchvision import models
 _WEIGHTS_REGISTRY = {
     "resnet18": models.ResNet18_Weights,
     "resnet34": models.ResNet34_Weights,
+    "resnet50": models.ResNet50_Weights,
+}
+
+_MODEL_BUILDERS = {
+    "resnet18": models.resnet18,
+    "resnet34": models.resnet34,
+    "resnet50": models.resnet50,
 }
 
 
@@ -18,11 +25,33 @@ def resolve_weights(model_name, weights="DEFAULT"):
     return getattr(enum, weights)
 
 
-def load_pretrained_model(num_classes, weights=None, model_name="resnet18"):
-    if model_name == "resnet18":
-        model = models.resnet18(weights=weights)
-    elif model_name == "resnet34":
-        model = models.resnet34(weights=weights)
+def load_checkpoint_weights(model, checkpoint_path, map_location="cpu"):
+    """Load a raw state-dict checkpoint (e.g. a research-repo release) into model.
+
+    Handles the two conventions such checkpoints commonly use: wrapping the
+    state dict under a "state_dict" key, and a "module." prefix left over from
+    training with nn.DataParallel.
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=True)
+    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+        checkpoint = checkpoint["state_dict"]
+    state_dict = {key.removeprefix("module."): value for key, value in checkpoint.items()}
+    model.load_state_dict(state_dict)
+    return model
+
+
+def load_pretrained_model(
+    num_classes, weights=None, model_name="resnet18", weights_checkpoint=None
+):
+    """Build model_name with either torchvision weights or a custom checkpoint.
+
+    weights_checkpoint (if given) is loaded into the full 1000-class backbone
+    before the classifier head is replaced, since such checkpoints assume the
+    original ImageNet class count.
+    """
+    model = _MODEL_BUILDERS[model_name](weights=weights)
+    if weights_checkpoint is not None:
+        load_checkpoint_weights(model, weights_checkpoint)
     model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
     return model
 

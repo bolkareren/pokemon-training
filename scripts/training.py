@@ -29,6 +29,9 @@ TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
 
 def main(config: ExperimentConfig) -> None:
     data_dir = config.data_dir or PROJECT_ROOT / "data"
+    weights_checkpoint = config.weights_checkpoint
+    if weights_checkpoint is not None and not weights_checkpoint.is_absolute():
+        weights_checkpoint = PROJECT_ROOT / weights_checkpoint
 
     mlflow.set_tracking_uri(TRACKING_URI)
 
@@ -50,11 +53,14 @@ def main(config: ExperimentConfig) -> None:
     print(f"validation_batches: {len(val_loader)}")
     print(f"test_batches: {len(test_loader)}")
 
-    weights = resolve_weights(config.model_name, config.weights)
+    # A custom checkpoint supplies its own pretrained backbone, so it takes
+    # precedence over the torchvision weights enum rather than combining with it.
+    weights = None if weights_checkpoint else resolve_weights(config.model_name, config.weights)
     model = load_pretrained_model(
         num_classes=num_classes,
         weights=weights,
         model_name=config.model_name,
+        weights_checkpoint=weights_checkpoint,
     )
     model = set_trainable_weights(model, train_last_n_layers=config.train_last_n_layers)
     model = set_batch_norm_trainable(model, trainable=config.train_batch_norm_affine)
@@ -75,10 +81,11 @@ def main(config: ExperimentConfig) -> None:
     print(f"trainable_parameters: {trainable_parameters}")
     print(f"percentage: {trainable_parameters / total_parameters * 100:.2f}%")
 
-    # asdict keeps data_dir as a Path; record the resolved string so both
-    # MLflow params and the YAML artifact stay serializable.
+    # asdict keeps Path fields as Path objects; stringify so both MLflow params
+    # and the YAML artifact stay serializable.
     config_dict = asdict(config)
     config_dict["data_dir"] = str(data_dir)
+    config_dict["weights_checkpoint"] = str(weights_checkpoint) if weights_checkpoint else None
 
     mlflow.set_experiment(config.experiment_name)
     with mlflow.start_run(run_name=config.run_name):

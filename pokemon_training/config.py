@@ -21,21 +21,32 @@ class ExperimentConfig:
     random_state: int = 42
 
     # Model
-    model_name: str = "resnet18"
+    model_name: str = "resnet50"
     weights: str | None = "DEFAULT"  # torchvision weights enum name, or None
-    train_last_n_layers: int = 5
+    # Local path to a raw state-dict checkpoint (relative paths resolve against
+    # <project_root>). Overrides `weights` when set - the checkpoint's own
+    # pretrained backbone is used instead of a torchvision weights enum.
+    # Shape-biased ResNet50 (SIN+IN, then fine-tuned on IN - "Shape-ResNet")
+    # from rgeirhos/texture-vs-shape (ICLR 2019); validated best config here
+    # across 3 seeds (mean 0.906, stdev 0.007 val accuracy). See EXPERIMENTS.md
+    # Phase 8-9.
+    weights_checkpoint: Path | None = Path("weights/resnet50_shape_biased.pth.tar")
+    # Best depth found for resnet50 + shape-biased weights (see EXPERIMENTS.md
+    # Phase 9) - does not necessarily transfer to other architectures/weights.
+    train_last_n_layers: int = 3
     train_batch_norm_affine: bool = False
+    # Must stay "train" - "eval" costs ~10-13pts of validation accuracy.
     batch_norm_mode: str = "train"
 
     # Optimizer
     optimizer_type: str = "AdamW"
-    backbone_lr: float = 5e-4
+    backbone_lr: float = 2e-4
     classifier_lr: float = 1e-3
-    weight_decay: float = 1e-3
+    weight_decay: float = 2e-3
     label_smoothing: float = 0.2
 
     # Training loop
-    epochs: int = 18
+    epochs: int = 16
 
     # Tracking
     experiment_name: str = "pokemon-classification"

@@ -8,4 +8,5 @@ mlflow.db
 
 raw_data/*
 data/*
+weights/*
 *.DS_Store
