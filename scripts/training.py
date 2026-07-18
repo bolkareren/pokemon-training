@@ -87,6 +87,17 @@ def main(config: ExperimentConfig) -> None:
     config_dict["data_dir"] = str(data_dir)
     config_dict["weights_checkpoint"] = str(weights_checkpoint) if weights_checkpoint else None
 
+    # MLflow bakes an experiment's artifact_location in as an absolute path at
+    # creation time and never updates it - if the project directory is later
+    # moved/renamed, every run silently writes artifacts outside the project.
+    # Pin it to the current PROJECT_ROOT the first time an experiment is
+    # created, so a future move can't reintroduce that. Existing experiments
+    # are left alone; artifact_location is only settable at creation time.
+    if mlflow.get_experiment_by_name(config.experiment_name) is None:
+        mlflow.create_experiment(
+            config.experiment_name,
+            artifact_location=f"file://{PROJECT_ROOT / 'mlruns'}",
+        )
     mlflow.set_experiment(config.experiment_name)
     with mlflow.start_run(run_name=config.run_name):
         # Params: the full config (single source of truth) plus resolved facts
