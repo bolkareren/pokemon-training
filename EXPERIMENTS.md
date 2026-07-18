@@ -438,6 +438,58 @@ including the baseline — these are additions to it, not replacements.
 - [ ] **c7-stack** — combine whichever clear the 2× SEM bar individually. Run
       only after the singles, since combined effects are rarely additive.
 
+**Results** (baseline `c2-resnet50-standard` = 0.653, SEM 0.013, gap +0.977):
+
+| run | oof top-1 | SEM | delta | × SEM | top-5 | gap |
+|---|---|---|---|---|---|---|
+| c7-morphological | 0.670 | 0.014 | +0.017 | +0.91 | 0.841 | +0.895 |
+| c7-hflip | 0.668 | 0.018 | +0.015 | +0.68 | 0.827 | +0.920 |
+| *baseline* | *0.653* | *0.013* | — | — | *0.837* | *+0.977* |
+| c7-resolution-jitter | 0.645 | 0.014 | -0.008 | -0.42 | 0.824 | +1.018 |
+| **c7-elastic** | **0.605** | 0.019 | **-0.049** | **-2.13** | 0.792 | +1.133 |
+
+**Augmentation is not the lever it was predicted to be.** Nothing cleared the 2×
+SEM bar in the positive direction. The only result that cleared it at all is
+`elastic`, which is **significantly worse** — the single largest effect in the
+phase is a harm, not a gain. The pre-registered estimate of +3-8pt for this
+phase was wrong, and the reasoning behind it ("the dataset is small, so data
+variety is the binding constraint") does not survive contact with the data.
+
+**Why elastic hurts, and what it implies.** For most image tasks a mild elastic
+warp is a safe augmentation because the label survives local deformation. Here
+the silhouette outline *is* the entire signal — there is no texture, no colour,
+no interior detail to fall back on. Warping the contour destroys
+label-relevant information rather than adding invariance. That is the same
+reason `resolution-jitter` is flat-to-negative: it was aimed at an artifact, but
+it degrades shape while doing so.
+
+This reframes the problem. The ~+1.0 train/val gap is **not** primarily a
+data-variety problem, because the interventions that add variety do not close
+it. `hflip` and `morphological` each moved it only slightly (0.920 and 0.895),
+and in proportion to their tiny accuracy gains.
+
+**What is worth keeping.** `hflip` and `morphological` are both modestly
+positive, both reduce the gap, and are the only two that do either. Individually
+neither is significant, but they are label-preserving by construction (a
+mirrored silhouette is the same Pokémon; a 1px thicker outline is the same
+Pokémon), which is a prior worth something beyond the measurement. They are the
+right candidates for the stack.
+
+**Recommended next runs, in order:**
+
+1. **`c7-baseline-seed43`** — a second-seed baseline. Every C7 delta is measured
+   against a single reference run whose own seed variation is unknown. At these
+   effect sizes (1.5-1.7pt) that reference is doing more work than it can bear.
+   This is the cheapest way to find out whether the two positives are real.
+2. **`c7-stack-hflip-morph`** — the two label-preserving augmentations together.
+3. **C9, moved earlier.** Top-5 is 0.837 against top-1 0.653 and augmentation
+   did not move it. That 18pt spread is the model shortlisting correctly and
+   choosing wrong, which is a discrimination problem between similar shapes —
+   exactly what C9 measures. If a large share of the remaining error is pairs
+   that are genuinely inseparable as silhouettes, the ceiling is well below 1.0
+   and C3-C6 deserve much less effort than planned. **Run C9 before more
+   tuning.**
+
 Deferred to a later pass: RandAugment (geometric ops only — colour ops are
 no-ops after thresholding), MixUp and CutMix. Those change the loss target as
 well as the input, so they are a different kind of intervention and would
