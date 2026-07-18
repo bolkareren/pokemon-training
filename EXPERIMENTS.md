@@ -670,7 +670,64 @@ Cross-generation range falls from 2.24× to 1.09×, while every evolution line
 tested still increases: pidgey/pidgeotto/pidgeot → 70/104/115 at gen 0 and
 81/89/151 at gen 6.
 
-- [ ] **c11-scale-norm** — the intervention on its own
+### This uses metadata the deployed model would not have
+
+The scale factor is keyed on **sprite index**, which is a fact about the dataset
+directory, not about the image. An arbitrary silhouette arriving at inference has
+no generation label, so the preprocessing could not be applied to it.
+
+This is not label leakage — every class appears at every generation, so nothing
+about the answer leaks, and accuracy is not inflated the way the shiny
+duplicates inflated it. It is a **deployment-realism** problem: the benchmark
+would measure a setting the model never operates in. `c11-scale-norm` is
+therefore an **oracle**, and must be labelled as one. Its value is diagnostic —
+it upper-bounds how much the scale confound costs, which tells us whether solving
+it honestly is worth the work.
+
+**Generation is ~90% recoverable from the image alone**, which makes an honest
+version possible. Sprites were upsampled to 224 with nearest-neighbour, so a 56px
+source leaves 4×4 constant blocks and a 128px source leaves 1.75×. Estimating the
+source resolution by round-tripping the mask through each candidate size and
+scoring reconstruction agreement recovers it in 358/400 cases:
+
+| true source | recovered |
+|---|---|
+| 56px | 100% |
+| 64px | 100% |
+| 80px | 100% |
+| 96px | 100% |
+| 120px | 75% |
+| 128px | 94% |
+| 112px | 0% (aliases to 56px — 224 is an exact multiple of both) |
+
+So for sprite-derived input the factor can be estimated per-image with no
+metadata. Note this still leans on an artifact of *this* pipeline: a
+hand-drawn or high-resolution silhouette has no block structure and the estimator
+would fail. It buys deployment realism for the sprite setting, not generality.
+
+### What is actually available without metadata
+
+Worth being explicit about, since it bounds the whole problem:
+
+- **Contour shape** — the primary signal, currently under-exploited because small
+  sprites have few effective pixels on the creature.
+- **Aspect ratio** — scale-free, metadata-free, and never given to the model
+  explicitly.
+- **Topology** — holes, protrusion count, limb structure. Separates
+  Diglett/Dugtrio in a way size cannot.
+- **Relative proportion** — head-to-body ratio, limb thickness against torso
+  width. Scale-free and metadata-free.
+- **Absolute size** — *not* available. There is no reference to measure against
+  in an isolated silhouette.
+
+That last point is the substantive consequence. Pidgeot is not merely a larger
+Pidgey; it has a different crest and tail proportion. Venusaur has a flower
+Bulbasaur lacks. **The honest replacement for absolute size is relative
+proportion**, and that is what a better encoding has to surface. It also
+retrospectively justifies bbox-cropping — not to normalise size away, but to
+spend the available pixels on the creature instead of the padding.
+
+- [ ] **c11-scale-norm** (ORACLE — not deployable, diagnostic only)
   ```bash
   uv run python scripts/training.py --run-name c11-scale-norm --folds 5 --normalize-sprite-scale
   ```
@@ -684,6 +741,40 @@ tested still increases: pidgey/pidgeotto/pidgeot → 70/104/115 at gen 0 and
 Note this changes the input distribution, so a gain here is not comparable to
 the C1-C7 numbers as a hyperparameter change would be — depth and LR may want
 re-checking afterwards.
+
+## Phase C12 — Metadata-free encoding
+
+C11's oracle answers "how much does the scale confound cost". This phase asks
+the question that matters for a model anyone could actually use: **how much
+differentiating information can be extracted from a bare silhouette?**
+
+Ordered by how much they can be trusted to generalise:
+
+- [ ] **c12-estimated-scale** — the honest version of C11: estimate the source
+      resolution per image (~90% accurate, above) and apply the corresponding
+      factor. Whatever fraction of C11's oracle gain survives here is the real,
+      deployable gain. If it survives fully, the metadata dependency was
+      incidental; if it collapses, the oracle was measuring the metadata.
+- [ ] **c12-bbox-crop-shape** — bbox-crop and fit to the canvas, deliberately
+      discarding absolute size. Now correctly motivated: it spends pixels on the
+      creature rather than the padding, raising effective resolution most for the
+      late-generation sprites that currently have the least. Expected to trade a
+      size cue for a detail cue — the C9 rerun says which is worth more.
+- [ ] **c12-aspect-preserved** — bbox-crop that fits the longer side and pads the
+      shorter, so aspect ratio survives as a scale-free proxy for body plan.
+      Likely strictly better than the square-fit above.
+- [ ] **c12-multichannel** — the three input channels are currently three copies
+      of the same binary mask, so two thirds of the input capacity is redundant.
+      Fill them: mask, signed distance transform (encodes thickness and the
+      medial axis, i.e. proportion), and boundary curvature (encodes protrusions
+      — crests, tails, spikes, which is where similar body plans differ). All
+      three are derived from the silhouette alone, so all are deployable.
+- [ ] **c12-rerun-confusion-study** on the best of these, checking specifically
+      whether evolution-line confusions drop.
+
+The prediction worth recording: if `c12-multichannel` and `c12-aspect-preserved`
+recover most of C11's oracle gain, then absolute size was never the real signal —
+proportion was, and size was only a noisy proxy for it.
 
 ## Phase C10 — Final evaluation (once only)
 
