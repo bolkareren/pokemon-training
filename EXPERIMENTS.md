@@ -193,14 +193,63 @@ capacity was selected when memorizing duplicates *was* the winning strategy.
   uv run python scripts/training.py --run-name c1-lastN2 --folds 5 --train-last-n-layers 2
   ```
 - [x] **c1-lastN3** — = `c0-5fold`, **0.596** — *prior (invalid): 0.908*
-- [ ] **c1-lastN4** — *prior (invalid): 0.876*
+- [x] **c1-lastN4** — *prior (invalid): 0.876*
   ```bash
   uv run python scripts/training.py --run-name c1-lastN4 --folds 5 --train-last-n-layers 4
   ```
-- [ ] **c1-lastN5** — *prior (invalid): 0.857*
+- [x] **c1-lastN5** — identical to `lastN=4`, see below — *prior (invalid): 0.857*
+- [ ] **c1-lastN6** — the only genuinely deeper point (adds `conv1`)
   ```bash
-  uv run python scripts/training.py --run-name c1-lastN5 --folds 5 --train-last-n-layers 5
+  uv run python scripts/training.py --run-name c1-lastN6 --folds 5 --train-last-n-layers 6
   ```
+
+**Results:**
+
+| run | trainable | oof top-1 | SEM | per-fold |
+|---|---|---|---|---|
+| c1-lastN0 | 309,399 | 0.156 | 0.002 | — |
+| c1-lastN1 | 15,251,607 | 0.520 | 0.015 | — |
+| **c1-lastN2** | 22,329,495 | **0.606** | 0.012 | 0.613 0.595 0.572 0.644 0.608 |
+| c1-lastN3 (= c0-5fold) | 23,541,911 | 0.596 | 0.006 | 0.577 0.599 0.595 0.613 0.599 |
+| c1-lastN4 | 23,754,903 | 0.565 | 0.041 | **0.405** 0.631 0.563 0.608 0.617 |
+| c1-lastN5 | 23,754,903 | 0.565 | 0.041 | *(identical run)* |
+
+**`lastN=5` is not a distinct configuration — it is `lastN=4`.** The
+parameterized feature layers are `[conv1, bn1, layer1, layer2, layer3, layer4]`,
+so `lastN=5` additionally unfreezes `bn1`, whose only parameters are BN affine —
+and `set_batch_norm_trainable(trainable=False)` runs afterwards and re-freezes
+exactly those. Both produce 23,754,903 trainable parameters and, at a fixed seed,
+byte-identical predictions (627/1110). `lastN=7` collapses onto `lastN=6` the
+same way.
+
+This retroactively breaks part of the old depth sweep, which recorded
+`lastN=4` → 0.876 and `lastN=5` → 0.857 as separate data points. They were the
+same configuration run twice. **That 1.9pt spread is a direct measurement of
+run-to-run noise between identical setups** — independent confirmation that the
+old ±3-4pt significance threshold was far too tight, requiring no statistical
+argument at all. Only `lastN` ∈ {0,1,2,3,4,6} are distinct; a sweep should skip
+5 and 7, or pass `--train-batch-norm-affine` to make `bn1` meaningful.
+
+**Depth is a plateau, not a peak.** 0.606 / 0.596 / 0.565 across lastN 2/3/4 sit
+within ~1-2× their combined SEMs, so the "shallower is better" prediction from
+the leaky-era critique is **not confirmed** — merely not contradicted. What is
+clear is the floor: `lastN=0` (0.156) and `lastN=1` (0.520) are decisively worse,
+far below their leaky-era priors of 0.544 and 0.843. The leak flattered the
+weakest configurations most, which makes sense — a frozen backbone can still
+retrieve a memorized duplicate.
+
+**`lastN=4` is unstable rather than worse.** Its fold 1 collapsed to 0.405 while
+the other four (0.563-0.631) sit on the plateau; excluding it the mean is 0.605,
+identical to `lastN=2`. The bare mean would read as "depth 4 is worse", which is
+the wrong conclusion. Its fold-1 gap (+0.97) is unremarkable, so train and val
+loss moved together — divergence, not overfitting.
+
+That is the same signature as the one surviving leaky-era finding
+(`blr=4e-4` collapsing at `lastN=3`), one axis over: with ~23M parameters
+unfrozen, a constant LR and **no warmup or schedule at all**, deep unfreezing
+sits near an instability boundary. This promotes **C5 (cosine + warmup)** from
+"training-loop gap" to a likely prerequisite for using any depth ≥ 3 reliably,
+and it should be run before drawing a final conclusion about depth.
 
 ## Phase C2 — Backbone capacity
 
@@ -212,19 +261,76 @@ Run at a fixed `lastN=3` so the comparison is apples-to-apples with `c0-5fold`
 and with each other. Re-check the winner at C1's best depth afterwards, since
 the optimal depth may differ per architecture.
 
-- [ ] **c2-resnet18** — *prior (invalid): 0.880*
+- [x] **c2-resnet18** — *prior (invalid): 0.880*
   ```bash
   uv run python scripts/training.py --run-name c2-resnet18 --folds 5 --model-name resnet18 --weights-checkpoint None
   ```
-- [ ] **c2-resnet34** — *prior (invalid): 0.876*
+- [x] **c2-resnet34** — *prior (invalid): 0.876*
   ```bash
   uv run python scripts/training.py --run-name c2-resnet34 --folds 5 --model-name resnet34 --weights-checkpoint None
   ```
-- [ ] **c2-resnet50-standard** — *prior (invalid): 0.871*
+- [x] **c2-resnet50-standard** — *prior (invalid): 0.871*
   ```bash
   uv run python scripts/training.py --run-name c2-resnet50-standard --folds 5 --model-name resnet50 --weights-checkpoint None
   ```
 - [x] **c2-resnet50-shape** — = `c0-5fold`, **0.596** — *prior (invalid): 0.908*
+
+**Results** (all at `lastN=3`, identical hyperparameters):
+
+| run | weights | oof top-1 | SEM | top-5 | gap | per-fold |
+|---|---|---|---|---|---|---|
+| **c2-resnet50-standard** | ImageNet | **0.653** | 0.013 | 0.837 | +0.977 | 0.644 0.649 0.613 0.671 0.689 |
+| c2-resnet18 | ImageNet | 0.618 | 0.013 | 0.812 | +1.048 | 0.622 0.644 0.568 0.622 0.635 |
+| c0-5fold | shape-biased | 0.596 | 0.006 | 0.813 | +0.936 | 0.577 0.599 0.595 0.613 0.599 |
+| c2-resnet34 | ImageNet | 0.584 | 0.019 | 0.798 | +1.069 | 0.608 0.599 0.509 0.604 0.599 |
+
+**Headline: the shape-biased checkpoint is actively harmful.**
+`c2-resnet50-standard` vs `c0-5fold` is the cleanest controlled comparison in
+this whole investigation — same architecture, same depth, same hyperparameters,
+differing *only* in pretrained-weight origin. Standard ImageNet weights win by
+**5.7pt, or 4.0× the combined SEM.** That clears the 2× bar comfortably and is
+the first result here that is unambiguously significant rather than suggestive.
+
+This inverts the premise the entire leaky-era configuration was built on.
+`resnet50` was adopted *specifically* to use the shape-biased checkpoint, on the
+theory that texture-free silhouettes suit a contour-biased backbone. The theory
+is appealing and the evidence for it (0.908) was the single most leak-inflated
+number in the old file. Tested honestly, it costs ~6 points.
+
+Worth noting the old file contained a hint of this that was explained away at
+the time: at `lastN=2`, shape-biased already underperformed standard weights
+(0.862 vs 0.871). That was dismissed as noise on the way to the `lastN=3`
+result. It was the real signal.
+
+**Capacity is not the axis; weight origin is.** With the checkpoint controlled
+for, the ordering is resnet50 (0.653) > resnet18 (0.618) > resnet34 (0.584) —
+not monotonic in size, and the 50-vs-18 gap is 1.9× SEM, just under the bar. The
+"smaller model for a small dataset" prediction is **not** supported: the largest
+backbone won. What had looked like a capacity effect in C2's first three results
+was the checkpoint confound.
+
+**Still badly overfit.** Every gap here is ~+1.0, and the best config's top-5
+(0.837) is 18pt above its top-1 (0.653). Neither architecture nor weights fixes
+that — it is what C3 (regularization), C5 (schedule) and C7 (augmentation) are
+for.
+
+### Recommended next step before C3
+
+`ExperimentConfig` still defaults to `weights_checkpoint=weights/resnet50_shape_biased.pth.tar`,
+so **every command in C3-C6 below currently inherits the losing checkpoint.**
+Change the default to standard ImageNet weights (`weights_checkpoint=None`)
+before running them, or the whole regularization and schedule sweep gets tuned
+on top of a 6-point handicap. Deliberately not changed automatically: it silently
+redefines what "no flag" means, which is the exact trap documented above.
+
+Two follow-ups this opens:
+
+- **Re-run C1's depth sweep on standard weights.** `lastN=3` was selected for the
+  shape-biased checkpoint; the depth plateau may sit elsewhere.
+- **Re-check the shape-biased hypothesis at low depth.** It is plausible that
+  contour-biased features help only when mostly frozen (`lastN` ∈ {0,1}), and
+  that fine-tuning 98.8% of the network simply overwrites them. That would
+  rescue the underlying idea while confirming this configuration was wrong.
 
 The shape-biased hypothesis is worth a genuine retest rather than an inherited
 verdict. Silhouettes have zero texture, so a contour-biased backbone *should*

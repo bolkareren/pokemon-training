@@ -76,6 +76,7 @@ stated confidently below and is now known to be an artifact of the leak.
 | "`lastN=3` is a genuine sweet spot" | Same. 98.8% of resnet50 unfrozen against 914 real training images is a memorization-friendly configuration, not a generalization-friendly one. |
 | "`epochs` is flat past 16" | Measured on leaky val. On clean data `val_loss` was still falling at epoch 16. |
 | "OFAT: anything >3-4pt is real signal" | Derived from the understated 0.007 spread. The honest threshold was ~±8pt, so every Phase 10 verdict except the `blr=4e-4` collapse was noise. |
+| "lastN=4 (0.876) and lastN=5 (0.857) are different depths" | **They are the same configuration.** `lastN=5` only additionally unfreezes `bn1`, whose sole parameters are BN affine — which `set_batch_norm_trainable(trainable=False)` re-freezes immediately after. Identical trainable-parameter sets. The 1.9pt between them is a direct measurement of run-to-run noise on an identical setup, and on its own refutes the ±3-4pt threshold above. Same applies to `lastN=6` vs `lastN=7`. |
 
 The one Phase 10 finding that **does** survive is the `backbone_lr=4e-4`
 collapse (-49.8pt). An effect that large is not a sampling artifact, and it was
