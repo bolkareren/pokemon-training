@@ -123,73 +123,8 @@ def get_transforms(
     return train_transform, test_transform
 
 
-SCALE_MANIFEST_PATH = PROJECT_ROOT / "scale_index.json"
-
-_CANVAS = 224
-_WHITE = (255, 255, 255)
-
-
-def _scale_normalizing_loader(scale_by_index):
-    """ImageFolder loader that rescales each sprite by its generation's factor.
-
-    Sprite scale entangles an artifact with a signal. The artifact: later
-    generations use roomier canvases, so the creature fills ~45% of the frame in
-    Gen 1 and ~13% in Gen 6 (2.06x across generation medians). The signal: within
-    a generation, bigger Pokemon are drawn bigger - size rises monotonically
-    along the evolution line in 95% of cases, spread 1.83x. Because the two are
-    the same magnitude they cancel out, and size is unusable as a species cue.
-
-    One factor per sprite index scales every Pokemon at that index equally, so
-    between-generation differences collapse while the within-generation ordering
-    survives untouched. A per-image bbox crop would remove both.
-    """
-
-    def loader(path):
-        image = datasets.folder.default_loader(path)
-
-        match = re.fullmatch(r"image-(\d+)\.png", Path(path).name)
-        factor = scale_by_index.get(match.group(1), 1.0) if match else 1.0
-        if abs(factor - 1.0) < 1e-3:
-            return image
-
-        width, height = image.size
-        scaled = image.resize(
-            (max(1, round(width * factor)), max(1, round(height * factor))), Image.BILINEAR
-        )
-
-        # Recentre on the creature rather than the frame: scaling about the
-        # canvas centre would drift sprites that sit off-centre.
-        mask = np.array(scaled.convert("L")) <= 127
-        rows, cols = np.where(mask)
-        if len(rows):
-            centre_y, centre_x = rows.mean(), cols.mean()
-        else:
-            centre_y, centre_x = scaled.size[1] / 2, scaled.size[0] / 2
-
-        canvas = Image.new("RGB", (_CANVAS, _CANVAS), _WHITE)
-        canvas.paste(
-            scaled,
-            (round(_CANVAS / 2 - centre_x), round(_CANVAS / 2 - centre_y)),
-        )
-        return canvas
-
-    return loader
-
-
-def load_dataset(data_dir="data", transform=None, normalize_scale=False):
-    if not normalize_scale:
-        return datasets.ImageFolder(data_dir, transform=transform)
-
-    if not SCALE_MANIFEST_PATH.exists():
-        raise FileNotFoundError(
-            f"{SCALE_MANIFEST_PATH} not found - generate it with "
-            "`uv run python scripts/generate_scale_manifest.py`."
-        )
-
-    scale_by_index = json.loads(SCALE_MANIFEST_PATH.read_text())
-    return datasets.ImageFolder(
-        data_dir, transform=transform, loader=_scale_normalizing_loader(scale_by_index)
-    )
+def load_dataset(data_dir="data", transform=None):
+    return datasets.ImageFolder(data_dir, transform=transform)
 
 
 def _normal_sprite_indices(dataset):
@@ -329,7 +264,6 @@ def create_datasets(
     random_state=42,
     exclude_shiny=True,
     augmentations=None,
-    normalize_scale=False,
 ):
     train_transform, test_transform = get_transforms(**(augmentations or {}))
     base_dataset = load_dataset(data_dir)
@@ -342,12 +276,9 @@ def create_datasets(
         indices=indices,
     )
 
-    def build(transform):
-        return load_dataset(data_dir, transform=transform, normalize_scale=normalize_scale)
-
-    train_dataset = Subset(build(train_transform), train_idx)
-    val_dataset = Subset(build(test_transform), val_idx)
-    test_dataset = Subset(build(test_transform), test_idx)
+    train_dataset = Subset(load_dataset(data_dir, transform=train_transform), train_idx)
+    val_dataset = Subset(load_dataset(data_dir, transform=test_transform), val_idx)
+    test_dataset = Subset(load_dataset(data_dir, transform=test_transform), test_idx)
 
     return train_dataset, val_dataset, test_dataset, base_dataset.classes
 
@@ -361,7 +292,6 @@ def create_fold_data_loaders(
     exclude_shiny=True,
     group_aware=True,
     augmentations=None,
-    normalize_scale=False,
 ):
     """Cross-validation loaders over everything except a held-out test split.
 
@@ -389,10 +319,7 @@ def create_fold_data_loaders(
     )
 
     test_loader = DataLoader(
-        Subset(
-            load_dataset(data_dir, transform=test_transform, normalize_scale=normalize_scale),
-            test_idx,
-        ),
+        Subset(load_dataset(data_dir, transform=test_transform), test_idx),
         batch_size=batch_size,
         shuffle=False,
     )
@@ -403,23 +330,13 @@ def create_fold_data_loaders(
     ):
         shuffle_generator = torch.Generator().manual_seed(random_state)
         train_loader = DataLoader(
-            Subset(
-                load_dataset(
-                    data_dir, transform=train_transform, normalize_scale=normalize_scale
-                ),
-                train_idx,
-            ),
+            Subset(load_dataset(data_dir, transform=train_transform), train_idx),
             batch_size=batch_size,
             shuffle=True,
             generator=shuffle_generator,
         )
         val_loader = DataLoader(
-            Subset(
-                load_dataset(
-                    data_dir, transform=test_transform, normalize_scale=normalize_scale
-                ),
-                val_idx,
-            ),
+            Subset(load_dataset(data_dir, transform=test_transform), val_idx),
             batch_size=batch_size,
             shuffle=False,
         )
@@ -430,13 +347,14 @@ def create_fold_data_loaders(
 
 def create_data_loaders(
     data_dir,
-    val_size=0.1,
-    test_size=0.1,
+    # 0.15, not 0.1: a 10% split of the 1307 deduplicated images is 131, fewer
+    # than the 151 classes, which makes a stratified split impossible.
+    val_size=0.15,
+    test_size=0.15,
     batch_size=16,
     random_state=42,
     exclude_shiny=True,
     augmentations=None,
-    normalize_scale=False,
 ):
     train_dataset, val_dataset, test_dataset, classes = create_datasets(
         data_dir=data_dir,
@@ -445,7 +363,6 @@ def create_data_loaders(
         random_state=random_state,
         exclude_shiny=exclude_shiny,
         augmentations=augmentations,
-        normalize_scale=normalize_scale,
     )
 
     # Pin the shuffle to its own generator seeded with random_state so epoch

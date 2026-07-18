@@ -46,14 +46,6 @@ class ExperimentConfig:
     # Mild elastic warp - a pose change is roughly an elastic deformation.
     augment_elastic: bool = False
 
-    # Rescale each sprite by a per-generation factor so the creature occupies a
-    # comparable share of the frame regardless of which generation drew it,
-    # while every Pokemon at a given generation is scaled identically so their
-    # relative sizes survive. Sprite scale currently mixes a canvas artifact
-    # (2.06x across generation medians) with real signal (1.83x within a
-    # generation; size rises along the evolution line in 95% of cases), and the
-    # two cancel. See EXPERIMENTS.md Phase C11.
-    normalize_sprite_scale: bool = False
     # Single global seed for the run: the stratified split, all RNGs
     # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
     random_state: int = 42
