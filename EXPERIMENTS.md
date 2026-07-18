@@ -347,18 +347,49 @@ suppressing top-1 discrimination between similar classes — it deliberately blu
 the target distribution and caps confidence, which is the opposite of what sharp
 separation needs. Swept downward against the 0.653 baseline:
 
-| label smoothing | oof top-1 | SEM | delta |
-|---|---|---|---|
-| 0.00 | 0.618 | 0.017 | -3.5pt |
-| 0.05 | 0.653 | 0.008 | 0.0pt |
-| 0.10 | 0.653 | 0.014 | 0.0pt |
-| **0.20** (default) | **0.653** | 0.013 | — |
+| label smoothing | oof top-1 | SEM | delta | train/val gap |
+|---|---|---|---|---|
+| 0.00 | 0.618 | 0.017 | -3.5pt | +1.885 |
+| 0.05 | 0.653 | 0.008 | 0.0pt | +1.321 |
+| 0.10 | 0.653 | 0.014 | 0.0pt | +1.153 |
+| 0.15 | 0.651 | 0.010 | -0.2pt | +1.082 |
+| **0.20** (default) | **0.653** | 0.013 | — | **+0.977** |
 
 Removing it entirely costs 3.5pt (-1.6× SEM); everything from 0.05 to 0.2 is
-identical to three decimals. So label smoothing is **not** hurting top-1, the
-axis is flat across its useful range, and the hypothesis behind this phase was
-wrong. It is also a second independent confirmation that the model is not
-over-regularised, which matters for reading the +0.977 train/val gap.
+flat. The hypothesis behind this phase was wrong.
+
+**The more important result is in the gap column.** The train/val gap responds
+strongly and monotonically to label smoothing — 1.885 → 0.977, nearly halved —
+while accuracy does not move at all across that range. **The gap is therefore not
+predictive of accuracy here, and optimising it is not a route to accuracy.**
+
+That retires a thread running through this whole file. The +0.977 gap was read at
+C0 as "badly overfit, so the headroom is in regularization and data". Both halves
+are now falsified directly: regularization moves the gap without moving accuracy
+(here), and augmentation moves neither (C7). The gap is real but it is not the
+binding constraint.
+
+### Model diversity: the ensemble headroom is larger than assumed
+
+Comparing *which* images each config gets right (all five score ~725/1110, but
+not on the same images — pairwise Jaccard is only 0.75-0.82):
+
+| | images |
+|---|---|
+| correct in any single config | ~725 (65.3%) |
+| correct in **all five** configs | 523 (47.1%) |
+| correct in **at least one** config | 880 (79.3%) |
+| never correct in any config | **230 (20.7%)** |
+
+Five configs that score identically disagree on ~20% of their predictions. That
+is high variance in *what gets learned*, which is what 888 training images
+predicts, and it means **D5's fold ensemble is worth considerably more than the
+"+2-4pt polish" originally estimated** — it should be promoted, not deferred.
+
+The 880 ceiling is an upper bound on ensembling, not an expectation: an ensemble
+lands nearer the average than the union. But 230 images that *no* configuration
+ever gets right is a useful empirical floor for this representation, and a much
+better target for the C9-style analysis than the aggregate error set.
 
 Remaining regularization axes (weight decay, batch-norm affine) move to **D1**.
 
@@ -813,14 +844,20 @@ C1's depth sweep ran on the shape-biased checkpoint, which C2 then discarded.
 Re-sweep on the current default, and re-check resnet18 vs resnet50, whose 3.5pt
 gap was 1.9× SEM — just under the bar.
 
-## Phase D5 — Inference-time gains
+## Phase D5 — Inference-time gains (promoted — see C3)
 
-- **TTA** (identity + hflip + small rotations), typically +1-2pt for no training
-  cost.
+Originally filed as end-of-run polish. The C3 diversity measurement changed that:
+configs scoring identically agree on only 75-82% of their predictions, and 880 of
+1110 images are solved by *at least one* config against ~725 for any single one.
+That is a lot of exploitable variance for a method that needs no new training.
+
 - **Fold ensemble** — average logits over the K fold models, which K-fold already
-  trains.
+  trains. Effectively free.
+- **Seed ensemble** — the same config at several `random_state` values.
+- **TTA** (identity + hflip + small rotations), typically +1-2pt.
 
-Both are polish rather than fixes, and both are worth taking at the end.
+Worth running early enough to know its size, since it changes how much the
+representation work needs to deliver on its own.
 
 ## Phase D6 — Final evaluation (once only)
 
