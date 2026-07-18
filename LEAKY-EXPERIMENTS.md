@@ -1,4 +1,24 @@
-# Experiment reproduction log
+# Experiment reproduction log (SUPERSEDED — leaky splits)
+
+> **Every accuracy in this file is invalid as a measure of generalization.**
+>
+> The dataset these runs trained on contained the *shiny* sprite of each Pokémon
+> alongside the normal one. Shiny sprites are recolours, so after the binary
+> silhouette threshold they are frequently pixel-identical to their normal
+> counterpart. 32.7% of the dataset was exact duplicates, and the random split
+> put a pixel-identical twin in train for **~62% of every validation set**.
+>
+> The headline result here — 0.906 across three seeds — is therefore mostly a
+> memorization score. Re-measured on deduplicated data, the same configuration
+> scores **0.617**. See [Phase 11](#phase-11--duplicateleakage-audit-blocking-audit-already-run)
+> for the audit, and **[EXPERIMENTS.md](EXPERIMENTS.md)** for the clean-data
+> replication that supersedes this file.
+>
+> This file is kept because the *relative* progression it records is still a
+> useful hypothesis set, and because knowing which conclusions were artifacts is
+> worth more than deleting them. But no number here should be quoted, and no
+> conclusion here should be carried forward without re-testing on clean data —
+> several are known to be backwards (see "What this file got wrong" below).
 
 This is a curated replay of the pre-MLflow experiments that were tracked under
 the (now-deleted) `runs/` directory. Each run there was a `result.json` with a
@@ -35,6 +55,32 @@ new accuracy lands near the historical one.
   scored **0.839–0.903**. Treat a ~5-point band as "reproduced."
 - Old (2026-05-16) runs logged only top-1; the new pipeline also logs top-3/top-5
   for free, so reruns are strictly more informative.
+- **The defaults changed after Phase 11.** `exclude_shiny=True` and
+  `val_size=test_size=0.15` are now the defaults, so the commands in Phases 1-10
+  no longer reproduce the accuracies printed beside them. To rerun any of them
+  as originally measured, append:
+  `--no-exclude-shiny --val-size 0.1 --test-size 0.1`. Every number in Part I is
+  a leaky-split number and is **not** comparable to clean-data results.
+
+### What this file got wrong
+
+Recorded so the same conclusions are not quietly re-inherited. Each of these was
+stated confidently below and is now known to be an artifact of the leak.
+
+| claim in this file | why it is wrong |
+|---|---|
+| "0.906 ± 0.007 is the strongest validated config" | ~62% of val was memorized. Honest score: **0.617**. |
+| "tight seed variance means it isn't a lucky split" | Binomial SE at n=217 is ±0.020; an observed 0.007 is *below the noise floor*. Leaked images answer identically every seed, which suppresses variance. Stability was evidence *of* the leak. |
+| "`lastN=3` has the smallest train/val gap (0.279), so it is well-regularized" | The gap was compressed mechanically — `val_loss` was partly re-measuring `train_loss`. Honest gap is **~0.80**. |
+| "resnet50 + shape-biased beats resnet18 (0.908 vs 0.880)" | Selected in a regime that rewarded memorizing duplicates, which favours capacity. Untested honestly; may reverse. |
+| "`lastN=3` is a genuine sweet spot" | Same. 98.8% of resnet50 unfrozen against 914 real training images is a memorization-friendly configuration, not a generalization-friendly one. |
+| "`epochs` is flat past 16" | Measured on leaky val. On clean data `val_loss` was still falling at epoch 16. |
+| "OFAT: anything >3-4pt is real signal" | Derived from the understated 0.007 spread. The honest threshold was ~±8pt, so every Phase 10 verdict except the `blr=4e-4` collapse was noise. |
+
+The one Phase 10 finding that **does** survive is the `backbone_lr=4e-4`
+collapse (-49.8pt). An effect that large is not a sampling artifact, and it was
+found precisely because the OFAT pass tested an assumption carried over from a
+different architecture instead of trusting it.
 
 ---
 
@@ -326,6 +372,164 @@ the 6.4pt spread (0.839-0.903) the resnet18 final config showed across its
 more stable, not a lucky split: **resnet50 + shape-biased weights, lastN=3,
 blr=2e-4, wd=2e-3, ls=0.2, epochs=16** is the strongest validated
 configuration found in this investigation.
+
+## Phase 10 — Flatness re-check (OFAT) on the new winning config
+
+`weight_decay`, `label_smoothing`, `backbone_lr`, and `epochs` were all found
+flat on **resnet18 with standard weights** (Phases 1-6). That was never
+re-verified on resnet50 + shape-biased weights at `lastN=3` - a different
+backbone/weight regime could have a different sensitivity profile, and
+`lastN=3`'s unusually tight train/val gap (0.279-0.308 across seeds, vs
+0.35-0.45 everywhere else) specifically raises the question of whether
+`epochs` still has headroom instead of being flat.
+
+One-factor-at-a-time, not a grid: hold the winning config fixed
+(`resnet50, shape-biased checkpoint, lastN=3, blr=2e-4, clr=1e-3, wd=2e-3,
+ls=0.2, epochs=16, random_state=42`) and vary one axis per run, bracketing
+each current value. Baseline is `r50-shape-reg-lastN3` above (0.908) - not
+rerun here.
+
+- [x] **r50-flat-wd1e-3** (weight_decay 2e-3 → 1e-3)
+  ```bash
+  make train ARGS="--run-name r50-flat-wd1e-3 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 1e-3 --label-smoothing 0.2 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-wd4e-3** (weight_decay 2e-3 → 4e-3)
+  ```bash
+  make train ARGS="--run-name r50-flat-wd4e-3 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 4e-3 --label-smoothing 0.2 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-ls0.1** (label_smoothing 0.2 → 0.1)
+  ```bash
+  make train ARGS="--run-name r50-flat-ls0.1 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.1 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-ls0.3** (label_smoothing 0.2 → 0.3)
+  ```bash
+  make train ARGS="--run-name r50-flat-ls0.3 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.3 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-blr1e-4** (backbone_lr 2e-4 → 1e-4)
+  ```bash
+  make train ARGS="--run-name r50-flat-blr1e-4 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 1e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.2 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-blr4e-4** (backbone_lr 2e-4 → 4e-4)
+  ```bash
+  make train ARGS="--run-name r50-flat-blr4e-4 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 4e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.2 --epochs 16 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-ep12** (epochs 16 → 12, checking for premature-stop headroom)
+  ```bash
+  make train ARGS="--run-name r50-flat-ep12 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.2 --epochs 12 --train-last-n-layers 3"
+  ```
+- [x] **r50-flat-ep20** (epochs 16 → 20, checking whether the tight gap means more training still helps)
+  ```bash
+  make train ARGS="--run-name r50-flat-ep20 --model-name resnet50 --weights-checkpoint weights/resnet50_shape_biased.pth.tar --backbone-lr 2e-4 --classifier-lr 1e-3 --weight-decay 2e-3 --label-smoothing 0.2 --epochs 20 --train-last-n-layers 3"
+  ```
+
+Single run per point, not multi-seed - this is a cheap directional check, not a
+rigorous re-estimate. Given the seed check above put single-run noise at
+roughly ±1.3pts for this specific config, any point landing >3-4pts from the
+0.908 baseline is a real signal worth following up with seed repeats; smaller
+deviations are noise.
+
+**Results:**
+
+| axis | value | val acc | delta vs 0.908 | verdict |
+|---|---|---|---|---|
+| weight_decay | 1e-3 | 0.885 | -2.3pt | flat-ish |
+| weight_decay | 4e-3 | 0.899 | -0.9pt | flat |
+| label_smoothing | 0.1 | 0.876 | -3.2pt | mildly not flat |
+| label_smoothing | 0.3 | 0.889 | -1.8pt | mildly not flat |
+| backbone_lr | 1e-4 | 0.903 | -0.5pt | flat |
+| **backbone_lr** | **4e-4** | **0.410** | **-49.8pt** | **collapsed** |
+| epochs | 12 | 0.880 | -2.8pt | slightly undertrained |
+| epochs | 20 | 0.899 | -0.9pt | flat, no extra headroom |
+
+**Headline finding: `backbone_lr` is not flat here.** `4e-4` didn't
+underperform gently, it collapsed training (final train/val loss 3.21/3.54,
+vs ~1.8/2.1 everywhere else; top-1 acc 0.41). This directly contradicts the
+resnet18-derived assumption that backbone LR is flat across roughly `1e-4` to
+`1e-3` - at `lastN=3` (98.8% of resnet50 unfrozen), somewhere between `2e-4`
+and `4e-4` is a real instability cliff, not a gentle slope. An assumption
+carried over from a different architecture/depth regime turned out to be
+wrong until directly tested - exactly what this OFAT pass was for.
+
+Everything else held up: `weight_decay` is genuinely flat (consistent with
+resnet18). `epochs` shows no headroom past 16 despite the tight train/val gap
+- saturates rather than keeps improving. `label_smoothing` shows a mild but
+consistent signal that `0.2` is a real (if small) local optimum - both
+alternatives underperformed in the same direction, though the effect size is
+close to the seed-noise floor.
+
+Not yet done: bisecting the `backbone_lr` cliff (e.g. `3e-4`) to find the
+actual safe ceiling, and confirming the `label_smoothing` effect isn't noise
+via seed repeats at `0.1`/`0.3`.
+
+---
+
+# Part II — The audit that invalidated Part I
+
+Phases 1-10 above tuned hyperparameters on `resnet18/34/50` and landed at a
+validated 0.906 ± 0.007. Before spending more runs on that number, this phase
+asked whether the number means what it appears to mean. It does not.
+
+This is the last phase in this file. Everything downstream of it — the honest
+re-baseline, the K-fold protocol, and the replication of Phases 1-10 on clean
+data — lives in **[EXPERIMENTS.md](EXPERIMENTS.md)**.
+
+## Phase 11 — Duplicate/leakage audit (BLOCKING; audit already run)
+
+`scripts/data_scraping.py` pulls every sprite off a Pokémon's pokemondb.net
+sprite page. That page serves, per generation, both the **normal** and the
+**shiny** sprite. Shiny differs from normal *only in palette* — so after the
+binary threshold in [data.py](pokemon_training/data.py) (`x > 0.5`), a
+Pokémon's shiny and normal sprite for a given generation are frequently the
+**same silhouette, pixel for pixel**.
+
+Measured by [scripts/duplicate_audit.py](scripts/duplicate_audit.py):
+
+| quantity | value |
+|---|---|
+| total images | 2162 |
+| exact-duplicate redundant images | **706 (32.7%)** |
+| near-duplicate (IoU > 0.97) redundant | **845 (39.1%)** |
+| distinct silhouettes after dedup | **1317** |
+
+Every one of the 151 classes has at least 4 redundant images. Because the
+split in `split_dataset_indices` is a plain stratified random split over image
+indices, duplicates land on both sides of it:
+
+| seed | val n | exact twin in train | near twin in train |
+|---|---|---|---|
+| 42 | 217 | 134 (**61.8%**) | 146 (67.3%) |
+| 43 | 217 | 120 (**55.3%**) | 143 (65.9%) |
+| 44 | 217 | 131 (**60.4%**) | 151 (69.6%) |
+
+**Roughly two thirds of every validation set is a memorization test, not a
+generalization test.** The reported 0.906 is therefore not a generalization
+estimate. If the leaked ~67% is answered near-perfectly, the implied accuracy
+on the non-leaked remainder is only ≈ **0.71**.
+
+This also explains the seed stability that made the result look trustworthy.
+The binomial standard error alone at p≈0.9, n=217 is `sqrt(.9×.1/217) ≈ 0.020`
+— the observed 0.007 stdev is *below the noise floor*, which is not a sign of a
+robust config. It is what you get when two thirds of the answers are fixed
+across seeds regardless of what the model learned.
+
+Two consequences for Phases 1-10 that must be carried forward:
+
+- **The noise floor was underestimated.** Phase 10 declared >3-4pt a real
+  signal based on the 0.007 seed spread. Against a ±2pt binomial SE the honest
+  threshold is closer to ±8pt. Every OFAT verdict there except the
+  `backbone_lr=4e-4` collapse (-49.8pt) is within noise and should be treated
+  as unresolved, not settled.
+- **`test_size=0.1` has never been evaluated.** `test_loader` is built in
+  [scripts/training.py:41](scripts/training.py:41) and never used. ~40 configs
+  were selected on the val split, so val is thoroughly overfit by selection —
+  but the test split is genuinely untouched. It should be spent exactly once,
+  at the very end, on a single final config.
+
+- [x] Audit duplication and split leakage
+  ```bash
+  uv run python scripts/duplicate_audit.py
+  ```
+
 
 ---
 
