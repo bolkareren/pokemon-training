@@ -718,9 +718,58 @@ and tail proportions differ. Venusaur has a flower Bulbasaur lacks.
 
 # Active plan
 
-Renumbered N1-N3 by execution order. Completed phases keep their original C
+Renumbered N0-N3 by execution order. Completed phases keep their original C
 numbers so earlier commits still resolve. Everything previously numbered C10-C12
 is superseded by what follows.
+
+**Next session starts at N0**, which tests whether ensembling should become the
+default baseline protocol. Then N1-N3 in order.
+
+## Phase N0 — Can the ensemble be the default baseline?
+
+**Run this first.** K-fold already trains K models on every experiment, so if
+ensembling them is a real gain it is a gain we are currently throwing away on
+every single run, and the sensible move is to make it the default protocol rather
+than a final-phase trick.
+
+Motivation is measured, not assumed (see C3): five configs scoring ~725/1110 each
+agree on only 75-82% of predictions, 880 images are solved by at least one, and
+230 by none. That is a large pool of exploitable variance.
+
+### The trap: the K fold models cannot be ensembled on out-of-fold data
+
+Averaging the five existing fold models and scoring them against
+`oof_predictions.json` **would be leakage**, and it would look like a large gain.
+Each image is out-of-fold for exactly one of the five models; the other four
+trained on it. An "ensemble" over all five is therefore four-fifths memorisation
+for every image — structurally the same mistake as the shiny duplicates, arrived
+at from the opposite direction.
+
+Two valid designs:
+
+- **Seed ensemble within each fold** (recommended). For each fold, train M models
+  on that fold's training set with different seeds, average their logits, and
+  predict that fold's validation images. Every prediction stays genuinely
+  out-of-fold, and the result is directly comparable to the 0.653 baseline. Cost:
+  K×M trainings — 5×3 ≈ 5h on resnet50, or ~2h on resnet18 for a first signal.
+- **Fold ensemble on the held-out test split.** The 197 test images were never
+  trained on by any fold model, so averaging all five is valid there. But it
+  spends the one-shot test set (D6) and n=197 gives ±3.4pt, so this is a
+  confirmation at the very end, not an exploratory measurement.
+
+- [ ] **n0-seed-ensemble-3** — M=3 seeds per fold, resnet18 first for speed
+- [ ] **n0-seed-ensemble-3-r50** — same on the default resnet50, if the signal holds
+- [ ] **n0-seed-ensemble-5** — does the gain keep scaling with M?
+
+Requires an `ensemble_size` config field: when > 1, `run_cross_validation`
+trains that many models per fold and averages logits before `predict_top_k`.
+Self-contained — no artifact plumbing, since the averaging happens inside the
+fold loop.
+
+**If it works, it changes the protocol for everything after it.** Every N1-N3
+comparison would then be ensemble-vs-ensemble, which also shrinks the noise floor
+that has made most of this investigation's differences unresolvable. That is
+arguably worth more than the accuracy points.
 
 ## Phase N1 — Settle augmentation, including removing what hurts
 
