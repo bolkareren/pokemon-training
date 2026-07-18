@@ -626,6 +626,65 @@ per-image rotation alignment) before concluding the shape hypothesis is dead.
       Cheapest way to catch processing bugs — the three masking branches in
       `data_processing.py` are a plausible source of silently malformed masks.
 
+## Phase C11 — Scale normalisation (preserving relative size)
+
+Sprite scale carries **two things at once**, and they are currently entangled:
+
+- **Artifact.** Later generations draw on roomier canvases. The creature fills
+  ~45% of the frame in Gen 1 and ~13% in Gen 6; median linear size ranges
+  **2.06×** across generations. This is about the sprite sheet, not the Pokémon.
+- **Signal.** Within a generation, bigger Pokémon *are* drawn bigger. Measured
+  across 12 evolution lines × 7 generations, size increases monotonically along
+  the line in **80 of 84 cases (95%)** — Pidgey < Pidgeotto < Pidgeot every
+  time. Within-generation spread is **1.83×**.
+
+The two are the same magnitude, so they cancel: a Gen 6 Venusaur can occupy the
+same pixel area as a Gen 1 Bulbasaur. Size is therefore unusable as a species cue
+unless the model first infers the generation — and C9 showed the most frequent
+confusions are precisely evolution lines (pidgeot→pidgeotto, bulbasaur→ivysaur,
+zubat→golbat), which share a body plan and differ mainly *in size*.
+
+This makes scale normalisation a better-motivated intervention than anything in
+C7, and it corrects a mistake: the bbox-crop-and-rescale proposed earlier would
+have removed the artifact **and the signal together**, destroying the one cue
+that separates the pairs the model most often gets wrong.
+
+**Method.** One scale factor per sprite index, not per image. Every Pokémon at a
+given generation is scaled identically, so between-generation differences
+collapse while the within-generation ordering survives untouched. Factors are
+precomputed into `scale_index.json` by
+[scripts/generate_scale_manifest.py](scripts/generate_scale_manifest.py) and
+applied by a custom `ImageFolder` loader; the target median is chosen so the
+largest creature at any generation cannot clip the canvas. Images are recentred
+on the creature's centroid rather than the frame.
+
+Verified on a 40-class sample:
+
+| | raw median size | normalised |
+|---|---|---|
+| gen index 0 | 157.9 | 111.4 |
+| gen index 3 | 112.1 | 111.2 |
+| gen index 6 | 70.4 | 102.1 |
+
+Cross-generation range falls from 2.24× to 1.09×, while every evolution line
+tested still increases: pidgey/pidgeotto/pidgeot → 70/104/115 at gen 0 and
+81/89/151 at gen 6.
+
+- [ ] **c11-scale-norm** — the intervention on its own
+  ```bash
+  uv run python scripts/training.py --run-name c11-scale-norm --folds 5 --normalize-sprite-scale
+  ```
+- [ ] **c11-scale-norm-hflip-morph** — with the two augmentations that trended
+      positive in C7, if the above helps
+- [ ] **c11-rerun-confusion-study** — re-run C9 against the new predictions and
+      check specifically whether evolution-line confusions drop. That is the
+      mechanism this is supposed to fix, so it is the test that matters more than
+      the headline accuracy.
+
+Note this changes the input distribution, so a gain here is not comparable to
+the C1-C7 numbers as a hyperparameter change would be — depth and LR may want
+re-checking afterwards.
+
 ## Phase C10 — Final evaluation (once only)
 
 After a single config is chosen on cross-validation, evaluate it on the
