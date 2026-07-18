@@ -13,16 +13,95 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SHINY_MANIFEST_PATH = PROJECT_ROOT / "shiny_index.json"
 
 
-def get_transforms():
+class RandomResolutionJitter:
+    """Downsample to a random sprite-era resolution, then back up to 224.
+
+    Raw sprites range 56x56 (Gen 1) to 128x128 (Gen 6+) and are all upsampled to
+    224x224, so edge thickness and blockiness vary systematically by generation -
+    a shortcut the model can key on instead of shape. Randomizing the effective
+    source resolution removes it.
+    """
+
+    SPRITE_SIZES = (56, 64, 80, 96, 120, 128)
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, image):
+        if torch.rand(1).item() >= self.p:
+            return image
+        index = torch.randint(len(self.SPRITE_SIZES), (1,)).item()
+        size = self.SPRITE_SIZES[index]
+        original = image.size
+        return image.resize((size, size), Image.BILINEAR).resize(original, Image.BILINEAR)
+
+
+class RandomMorphology:
+    """Randomly dilate or erode the silhouette by 1-2 pixels.
+
+    Operates on the thresholded binary mask, so it perturbs the contour itself
+    rather than greyscale edges. Dilation is a max filter; erosion is the same
+    filter on the inverted mask.
+    """
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, mask):
+        if torch.rand(1).item() >= self.p:
+            return mask
+
+        kernel = 3 if torch.rand(1).item() < 0.5 else 5
+        padding = kernel // 2
+        batched = mask.unsqueeze(0)
+
+        if torch.rand(1).item() < 0.5:
+            out = torch.nn.functional.max_pool2d(batched, kernel, stride=1, padding=padding)
+        else:
+            out = -torch.nn.functional.max_pool2d(-batched, kernel, stride=1, padding=padding)
+
+        return out.squeeze(0)
+
+
+def get_transforms(
+    hflip=False,
+    morphological=False,
+    resolution_jitter=False,
+    elastic=False,
+):
+    """Build (train, eval) transforms. Each augmentation is independently togglable.
+
+    Order matters. Resolution jitter, the affine, elastic and the flip all run on
+    the PIL image before tensor conversion; morphology runs after the binary
+    threshold, since it is defined on the mask. The threshold sits after the
+    geometric augmentations, so any interpolation they introduce is re-binarized
+    and the silhouette stays hard-edged.
+    """
+    geometric = []
+    if resolution_jitter:
+        geometric.append(RandomResolutionJitter())
+
+    geometric.append(
+        transforms.RandomAffine(
+            degrees=20,
+            translate=(0.2, 0.2),
+            scale=(0.85, 1.15),
+        )
+    )
+
+    if elastic:
+        geometric.append(transforms.ElasticTransform(alpha=40.0, sigma=5.0))
+    if hflip:
+        geometric.append(transforms.RandomHorizontalFlip(p=0.5))
+
+    mask_ops = [RandomMorphology()] if morphological else []
+
     train_transform = transforms.Compose(
         [
-            transforms.RandomAffine(
-                degrees=20,
-                translate=(0.2, 0.2),
-                scale=(0.85, 1.15),
-            ),
+            *geometric,
             transforms.ToTensor(),
             transforms.Lambda(lambda x: (x > 0.5).float()),
+            *mask_ops,
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
@@ -178,8 +257,10 @@ def split_dataset_indices(dataset, val_size, test_size, random_state=42, indices
     return train_idx, val_idx, test_idx
 
 
-def create_datasets(data_dir, val_size, test_size, random_state=42, exclude_shiny=True):
-    train_transform, test_transform = get_transforms()
+def create_datasets(
+    data_dir, val_size, test_size, random_state=42, exclude_shiny=True, augmentations=None
+):
+    train_transform, test_transform = get_transforms(**(augmentations or {}))
     base_dataset = load_dataset(data_dir)
     indices = _normal_sprite_indices(base_dataset) if exclude_shiny else None
     train_idx, val_idx, test_idx = split_dataset_indices(
@@ -205,6 +286,7 @@ def create_fold_data_loaders(
     random_state=42,
     exclude_shiny=True,
     group_aware=True,
+    augmentations=None,
 ):
     """Cross-validation loaders over everything except a held-out test split.
 
@@ -215,7 +297,7 @@ def create_fold_data_loaders(
     (train_loader, val_loader, val_idx); val_idx addresses the base dataset so
     out-of-fold predictions can be traced back to individual images.
     """
-    train_transform, test_transform = get_transforms()
+    train_transform, test_transform = get_transforms(**(augmentations or {}))
     base_dataset = load_dataset(data_dir)
     indices = (
         _normal_sprite_indices(base_dataset)
@@ -265,6 +347,7 @@ def create_data_loaders(
     batch_size=16,
     random_state=42,
     exclude_shiny=True,
+    augmentations=None,
 ):
     train_dataset, val_dataset, test_dataset, classes = create_datasets(
         data_dir=data_dir,
@@ -272,6 +355,7 @@ def create_data_loaders(
         test_size=test_size,
         random_state=random_state,
         exclude_shiny=exclude_shiny,
+        augmentations=augmentations,
     )
 
     # Pin the shuffle to its own generator seeded with random_state so epoch

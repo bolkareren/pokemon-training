@@ -81,6 +81,7 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
         random_state=config.random_state,
         exclude_shiny=config.exclude_shiny,
         group_aware=config.group_aware_folds,
+        augmentations=config.augmentations,
     )
     num_classes = len(classes)
     criterion = torch.nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
@@ -220,6 +221,7 @@ def main(config: ExperimentConfig) -> None:
                 test_size=config.test_size,
                 random_state=config.random_state,
                 exclude_shiny=config.exclude_shiny,
+                augmentations=config.augmentations,
             )
             print(f"train_batches: {len(train_loader)}")
             print(f"validation_batches: {len(val_loader)}")

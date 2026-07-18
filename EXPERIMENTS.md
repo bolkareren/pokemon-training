@@ -406,25 +406,49 @@ Current train transform is a single `RandomAffine(±20°, ±20%, 0.85-1.15×)`.
 With 914 real training images and a ~0.80 gap, this is where the largest honest
 gains most likely are.
 
-- [ ] **c7-hflip** — `RandomHorizontalFlip(0.5)`. Highest-value single change:
-      sprite facing direction is arbitrary (later generations flipped the
-      convention) and mirroring is label-preserving for a silhouette. Roughly
-      doubles effective data for free.
-- [ ] **c7-morphological** — random dilate/erode by 1-2px. Targets a real
-      artifact: raw sprites range 56×56 → 128×128 and are all upsampled to
-      224×224, so edge thickness varies systematically by generation.
-- [ ] **c7-resolution-jitter** — downsample to a random size in 56-128, then back
-      up. Same shortcut, attacked at its source.
-- [ ] **c7-elastic** — mild `ElasticTransform`; a pose change is roughly an
-      elastic warp.
-- [ ] **c7-randaugment** — geometric ops only (colour ops are no-ops after
-      thresholding).
-- [ ] **c7-mixup**, **c7-cutmix** — regularizes the many near-identical classes.
-- [ ] **c7-stack** — best 2-3 combined.
+**Baseline: 0.653** (`c2-resnet50-standard`, which is now exactly the defaults).
+Each augmentation is a separate `ExperimentConfig` flag and is tested **one at a
+time** first, so single effects are attributable before anything is combined.
+The always-on `RandomAffine(±20°, ±20%, 0.85-1.15×)` stays in every run,
+including the baseline — these are additions to it, not replacements.
 
-Worth confirming while here: the threshold `(x > 0.5)` is applied *after* the
-affine, so augmentation-induced interpolation is re-binarized. If that is
-unintentional, augmenting after thresholding would leave grey edges instead.
+- [ ] **c7-hflip** — `RandomHorizontalFlip(0.5)`. Sprite facing direction is
+      arbitrary (later generations flipped the convention) and a mirrored
+      silhouette is the same Pokémon, so this roughly doubles effective data.
+  ```bash
+  uv run python scripts/training.py --run-name c7-hflip --folds 5 --augment-hflip
+  ```
+- [ ] **c7-morphological** — dilate/erode the mask by 1-2px (max-filter, and the
+      same filter on the inverted mask). Perturbs contour thickness, which varies
+      systematically by sprite generation.
+  ```bash
+  uv run python scripts/training.py --run-name c7-morphological --folds 5 --augment-morphological
+  ```
+- [ ] **c7-resolution-jitter** — re-render at a random original sprite resolution
+      (56/64/80/96/120/128) before upsampling back to 224. Attacks the
+      generation-dependent edge artifact at its source.
+  ```bash
+  uv run python scripts/training.py --run-name c7-resolution-jitter --folds 5 --augment-resolution-jitter
+  ```
+- [ ] **c7-elastic** — mild `ElasticTransform(alpha=40, sigma=5)`; a pose change
+      is roughly an elastic deformation.
+  ```bash
+  uv run python scripts/training.py --run-name c7-elastic --folds 5 --augment-elastic
+  ```
+- [ ] **c7-stack** — combine whichever clear the 2× SEM bar individually. Run
+      only after the singles, since combined effects are rarely additive.
+
+Deferred to a later pass: RandAugment (geometric ops only — colour ops are
+no-ops after thresholding), MixUp and CutMix. Those change the loss target as
+well as the input, so they are a different kind of intervention and would
+confound this comparison.
+
+**Implementation note.** The binary threshold `(x > 0.5)` runs *after* the
+geometric augmentations, so any interpolation they introduce is re-binarized and
+the silhouette stays hard-edged. That is deliberate and is what makes
+`morphological` and `resolution-jitter` distinct interventions rather than
+variations on blur — verified: all four produce masks with exactly two distinct
+pixel values.
 
 ## Phase C8 — Inference-time gains
 

@@ -30,6 +30,31 @@ class ExperimentConfig:
     folds: int = 0
     # Keep near-duplicate silhouettes (IoU > 0.97) within a single fold.
     group_aware_folds: bool = True
+
+    # Augmentation. Each is independently togglable so single effects can be
+    # measured before combining. A RandomAffine (rotation/translation/scale) is
+    # always applied and is not gated by these. See EXPERIMENTS.md Phase C7.
+    # Mirror horizontally: sprite facing direction is arbitrary (later
+    # generations flipped the convention) and a mirrored silhouette is still the
+    # same Pokemon, so this roughly doubles the effective dataset.
+    augment_hflip: bool = False
+    # Dilate/erode the mask by 1-2px, perturbing contour thickness.
+    augment_morphological: bool = False
+    # Re-render at a random original sprite resolution (56-128px) before
+    # upsampling, removing the generation-dependent edge artifact.
+    augment_resolution_jitter: bool = False
+    # Mild elastic warp - a pose change is roughly an elastic deformation.
+    augment_elastic: bool = False
+
+    @property
+    def augmentations(self) -> dict[str, bool]:
+        """Augmentation flags in the form `get_transforms` expects."""
+        return {
+            "hflip": self.augment_hflip,
+            "morphological": self.augment_morphological,
+            "resolution_jitter": self.augment_resolution_jitter,
+            "elastic": self.augment_elastic,
+        }
     # Single global seed for the run: the stratified split, all RNGs
     # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
     random_state: int = 42
