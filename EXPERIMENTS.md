@@ -90,6 +90,23 @@ not repeat it:
 - Treat a difference as real only at roughly **2× SEM**, and confirm anything
   load-bearing with a second `random_state`.
 
+### Execution order
+
+Phase numbers are stable identifiers, not a running order. The intended order,
+revised after C1/C2:
+
+1. **C7 — augmentation.** Run first. The dataset is 888 training images per fold
+   with a ~+1.0 train/val gap, so the binding constraint is data variety, and
+   augmentation is the only lever that adds any. Regularization can only trade
+   capacity away; augmentation manufactures signal.
+2. **C3 — regularization**, sized against whatever gap survives C7. Tuning it
+   first would fit it to a gap that augmentation is about to change, and would
+   have to be redone anyway.
+3. **C5 — schedule/warmup**, which the C1 instability makes close to a
+   prerequisite for any depth ≥ 3.
+4. **C4, C6** — LR and optimizer, once the above are stable.
+5. **C1 re-sweep** on the new default checkpoint, then **C8-C10**.
+
 ---
 
 ## Phase C0 — Baseline (done)
@@ -314,14 +331,19 @@ was the checkpoint confound.
 that — it is what C3 (regularization), C5 (schedule) and C7 (augmentation) are
 for.
 
-### Recommended next step before C3
+### Default changed after this phase
 
-`ExperimentConfig` still defaults to `weights_checkpoint=weights/resnet50_shape_biased.pth.tar`,
-so **every command in C3-C6 below currently inherits the losing checkpoint.**
-Change the default to standard ImageNet weights (`weights_checkpoint=None`)
-before running them, or the whole regularization and schedule sweep gets tuned
-on top of a 6-point handicap. Deliberately not changed automatically: it silently
-redefines what "no flag" means, which is the exact trap documented above.
+`weights_checkpoint` now defaults to `None` (standard ImageNet weights) instead
+of the shape-biased checkpoint. **The defaults are therefore exactly
+`c2-resnet50-standard`, and the working baseline is 0.653, not 0.596.**
+
+Consequences for reading the rest of this file:
+
+- Every phase from C7 onward is measured against **0.653**.
+- C1's depth sweep and the C0 baseline were run on the shape-biased checkpoint
+  and are *not* directly comparable to anything run after this point.
+- To reproduce anything from C0-C2 that used the checkpoint, pass
+  `--weights-checkpoint weights/resnet50_shape_biased.pth.tar` explicitly.
 
 Two follow-ups this opens:
 

@@ -40,13 +40,19 @@ class ExperimentConfig:
     # Local path to a raw state-dict checkpoint (relative paths resolve against
     # <project_root>). Overrides `weights` when set - the checkpoint's own
     # pretrained backbone is used instead of a torchvision weights enum.
-    # Shape-biased ResNet50 (SIN+IN, then fine-tuned on IN - "Shape-ResNet")
-    # from rgeirhos/texture-vs-shape (ICLR 2019); validated best config here
-    # across 3 seeds (mean 0.906, stdev 0.007 val accuracy). See EXPERIMENTS.md
-    # Phase 8-9.
-    weights_checkpoint: Path | None = Path("weights/resnet50_shape_biased.pth.tar")
-    # Best depth found for resnet50 + shape-biased weights (see EXPERIMENTS.md
-    # Phase 9) - does not necessarily transfer to other architectures/weights.
+    #
+    # None (standard ImageNet weights) rather than the shape-biased checkpoint:
+    # on clean data the same architecture and hyperparameters score 0.653 with
+    # ImageNet weights vs 0.596 with shape-biased, a 5.7pt gap at 4.0x the
+    # combined SEM. The shape-biased checkpoint looked better only under the
+    # duplicate leak. To use it:
+    #   --weights-checkpoint weights/resnet50_shape_biased.pth.tar
+    # See EXPERIMENTS.md Phase C2.
+    weights_checkpoint: Path | None = None
+    # Depth is a plateau rather than a peak on clean data: lastN 2/3/4 land
+    # within 1-2x their combined SEMs. Kept at 3 because that is where the
+    # backbone comparison was run. Not re-swept since the checkpoint changed.
+    # See EXPERIMENTS.md Phase C1.
     train_last_n_layers: int = 3
     train_batch_norm_affine: bool = False
     # Must stay "train" - "eval" costs ~10-13pts of validation accuracy.
