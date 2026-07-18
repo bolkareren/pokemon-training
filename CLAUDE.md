@@ -9,9 +9,10 @@ silhouettes, for a "Who's That Pokémon?" style guessing game. Sprites are
 scraped from pokemondb.net, converted to silhouettes, and used to fine-tune a
 torchvision backbone (ResNet-18/34/50).
 
-**Current state: 0.653 out-of-fold accuracy**, 5-fold grouped CV over 1110
-images. Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting any
-experiment — particularly "Results so far" and "Noise floor".
+**Current state: 0.653 out-of-fold accuracy**, single model under 5-fold grouped
+CV over 1110 images. Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
+interpreting any experiment — particularly "Results so far" and "Noise floor".
+The active plan resumes at **Phase N1**.
 
 ## Commands
 
@@ -95,9 +96,16 @@ once deduplicated.
   resolution are properties of the dataset, not of an arbitrary input silhouette.
   A per-generation scale normalisation was built and then deliberately removed
   for this reason — see EXPERIMENTS.md "The scale finding".
-- **Ensembling the K fold models on out-of-fold data is leakage.** Each image is
-  out-of-fold for exactly one model and in-training for the other four. Use a
-  seed ensemble within each fold, or the held-out test split. See Phase N0.
+- **Don't ensemble during exploration.** Every experiment is a single model under
+  5-fold grouped CV. Ensembling triples the cost of each cheap single-factor test
+  and judges every later architecture as an ensemble on both accuracy and
+  compute, which is not how any of them would ship. It belongs in the final phase
+  only (D5). If a comparison is too close to call, use repeated CV or a second
+  `random_state` — that measures the same model better, rather than changing it.
+- **When the time does come: ensembling the K fold models on out-of-fold data is
+  leakage.** Each image is out-of-fold for exactly one model and in-training for
+  the other four. Use a seed ensemble within each fold, or the held-out test
+  split. See Phase D5.
 - Two MLflow experiments, deliberately not mixed: `pokemon-classification-clean`
   (current, the `ExperimentConfig` default) and `pokemon-classification` (the
   leaky-split runs). They use the same metric names for different things.

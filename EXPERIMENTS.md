@@ -383,13 +383,19 @@ not on the same images — pairwise Jaccard is only 0.75-0.82):
 
 Five configs that score identically disagree on ~20% of their predictions. That
 is high variance in *what gets learned*, which is what 888 training images
-predicts, and it means **D5's fold ensemble is worth considerably more than the
-"+2-4pt polish" originally estimated** — it should be promoted, not deferred.
+predicts.
 
-The 880 ceiling is an upper bound on ensembling, not an expectation: an ensemble
-lands nearer the average than the union. But 230 images that *no* configuration
-ever gets right is a useful empirical floor for this representation, and a much
-better target for the C9-style analysis than the aggregate error set.
+Two consequences, neither of which is "ensemble now":
+
+- **There is real headroom for D5 at the end** — but it stays at the end. See D5
+  for why making it the exploration baseline would be a mistake.
+- **The 230 images no configuration ever gets right are the better analysis
+  target** than any single run's error set, which is ~20% arbitrary. They isolate
+  what is hard about the representation from what is noisy about a run, and are
+  the right input to a C9-style study.
+
+The 880 figure is an upper bound on ensembling, not an expectation — an ensemble
+lands nearer the average than the union.
 
 Remaining regularization axes (weight decay, batch-norm affine) move to **D1**.
 
@@ -718,58 +724,14 @@ and tail proportions differ. Venusaur has a flower Bulbasaur lacks.
 
 # Active plan
 
-Renumbered N0-N3 by execution order. Completed phases keep their original C
+Renumbered N1-N3 by execution order. Completed phases keep their original C
 numbers so earlier commits still resolve. Everything previously numbered C10-C12
 is superseded by what follows.
 
-**Next session starts at N0**, which tests whether ensembling should become the
-default baseline protocol. Then N1-N3 in order.
-
-## Phase N0 — Can the ensemble be the default baseline?
-
-**Run this first.** K-fold already trains K models on every experiment, so if
-ensembling them is a real gain it is a gain we are currently throwing away on
-every single run, and the sensible move is to make it the default protocol rather
-than a final-phase trick.
-
-Motivation is measured, not assumed (see C3): five configs scoring ~725/1110 each
-agree on only 75-82% of predictions, 880 images are solved by at least one, and
-230 by none. That is a large pool of exploitable variance.
-
-### The trap: the K fold models cannot be ensembled on out-of-fold data
-
-Averaging the five existing fold models and scoring them against
-`oof_predictions.json` **would be leakage**, and it would look like a large gain.
-Each image is out-of-fold for exactly one of the five models; the other four
-trained on it. An "ensemble" over all five is therefore four-fifths memorisation
-for every image — structurally the same mistake as the shiny duplicates, arrived
-at from the opposite direction.
-
-Two valid designs:
-
-- **Seed ensemble within each fold** (recommended). For each fold, train M models
-  on that fold's training set with different seeds, average their logits, and
-  predict that fold's validation images. Every prediction stays genuinely
-  out-of-fold, and the result is directly comparable to the 0.653 baseline. Cost:
-  K×M trainings — 5×3 ≈ 5h on resnet50, or ~2h on resnet18 for a first signal.
-- **Fold ensemble on the held-out test split.** The 197 test images were never
-  trained on by any fold model, so averaging all five is valid there. But it
-  spends the one-shot test set (D6) and n=197 gives ±3.4pt, so this is a
-  confirmation at the very end, not an exploratory measurement.
-
-- [ ] **n0-seed-ensemble-3** — M=3 seeds per fold, resnet18 first for speed
-- [ ] **n0-seed-ensemble-3-r50** — same on the default resnet50, if the signal holds
-- [ ] **n0-seed-ensemble-5** — does the gain keep scaling with M?
-
-Requires an `ensemble_size` config field: when > 1, `run_cross_validation`
-trains that many models per fold and averages logits before `predict_top_k`.
-Self-contained — no artifact plumbing, since the averaging happens inside the
-fold loop.
-
-**If it works, it changes the protocol for everything after it.** Every N1-N3
-comparison would then be ensemble-vs-ensemble, which also shrinks the noise floor
-that has made most of this investigation's differences unresolvable. That is
-arguably worth more than the accuracy points.
+**Next session starts at N1.** Every phase here is measured as a **single model
+under 5-fold grouped CV**, which is the protocol every earlier result used and
+the only one that keeps comparisons honest — see the note under D5 on why
+ensembling is deliberately excluded from the exploration phase.
 
 ## Phase N1 — Settle augmentation, including removing what hurts
 
@@ -893,20 +855,48 @@ C1's depth sweep ran on the shape-biased checkpoint, which C2 then discarded.
 Re-sweep on the current default, and re-check resnet18 vs resnet50, whose 3.5pt
 gap was 1.9× SEM — just under the bar.
 
-## Phase D5 — Inference-time gains (promoted — see C3)
+## Phase D5 — Inference-time gains (final phase only)
 
-Originally filed as end-of-run polish. The C3 diversity measurement changed that:
-configs scoring identically agree on only 75-82% of their predictions, and 880 of
-1110 images are solved by *at least one* config against ~725 for any single one.
-That is a lot of exploitable variance for a method that needs no new training.
+**Deliberately excluded from the exploration phase**, despite the C3 diversity
+measurement suggesting a large gain is available. The reasoning is about what a
+baseline is *for*, not about whether ensembling works:
 
-- **Fold ensemble** — average logits over the K fold models, which K-fold already
-  trains. Effectively free.
+- **It multiplies the cost of every experiment.** A seed ensemble at M=3 makes
+  each N1-N3 run 3× more expensive. The whole plan is a sequence of cheap
+  single-factor tests, and tripling every one of them to buy accuracy that is not
+  what those tests are measuring is a bad trade.
+- **It sets an unrealistic precedent for everything measured against it.** Once
+  the baseline is an ensemble, every subsequent architecture and representation
+  is judged as an ensemble too — on both accuracy and compute. That is not the
+  configuration any of them would ship as, and it hides whether a change helps a
+  *model* or merely adds diversity to a pool.
+- **Noise reduction is a separate tool from ensembling.** If a specific
+  comparison is too close to call, the honest fix is repeated CV or a second
+  `random_state` on that comparison — which measures the same model more
+  precisely. Ensembling changes the model instead. Conflating the two was the
+  error in the earlier version of this section.
+
+So: run it once, at the end, on whatever configuration N1-N3 and D1-D4 settle on.
+
+- **Fold ensemble** — average logits over the K fold models. K-fold already
+  trains them, so at the end it is free.
 - **Seed ensemble** — the same config at several `random_state` values.
 - **TTA** (identity + hflip + small rotations), typically +1-2pt.
 
-Worth running early enough to know its size, since it changes how much the
-representation work needs to deliver on its own.
+### The trap, when the time comes
+
+Averaging the K fold models and scoring them against `oof_predictions.json`
+**would be leakage**, and it would look like a large gain. Each image is
+out-of-fold for exactly one of the K models; the other K-1 trained on it. An
+"ensemble" over all K is therefore (K-1)/K memorisation per image —
+structurally the same mistake as the shiny duplicates, reached from the opposite
+direction.
+
+Valid evaluations are a **seed ensemble within each fold** (every prediction
+stays genuinely out-of-fold, comparable to the single-model numbers), or a
+**fold ensemble on the held-out test split**, which no fold model ever trained
+on. The latter spends D6's one-shot test set, so it belongs in the same single
+final evaluation rather than as a separate measurement.
 
 ## Phase D6 — Final evaluation (once only)
 
