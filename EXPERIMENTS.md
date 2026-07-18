@@ -525,14 +525,89 @@ images over 151 classes is ~1.4 per class, so a confusion matrix would be
 essentially empty. Pooled out-of-fold predictions give ~7 per class over 1110
 images, and every sweep above emits them as `oof_predictions.json`.
 
-- [ ] **Confusion matrix over OOF predictions.** Rank the top confused ordered
-      pairs. Expected offenders: Voltorb/Electrode, Diglett/Dugtrio, Ekans/Arbok,
-      Nidoran-♀/♂, Geodude/Graveler, the Rhyhorn line.
-- [ ] **Confusion vs. silhouette distance.** Correlate per-pair confusion rate
-      against IoU between class-mean silhouettes. The key test: it separates *"the
-      model is weak"* from *"these two are not separable from silhouette alone"* —
-      an irreducible error floor. Quantify that floor; it is the real ceiling on
-      this task and is worth knowing before chasing further points.
+- [x] **Confusion matrix + confusion-vs-similarity.** Run against any
+      `oof_predictions.json`:
+  ```bash
+  uv run python scripts/confusion_study.py --run-name c2-resnet50-standard
+  ```
+
+**Results** (baseline `c2-resnet50-standard`, 1110 out-of-fold predictions).
+Similarity is max IoU between any two images of two classes, computed on
+bbox-cropped, scale-normalised masks — raw IoU would be dominated by the
+generation sprite-scale artifact (45% of frame in Gen 1 vs 13% in Gen 6).
+
+Near-identical class pairs are **rare**:
+
+| IoU threshold | pairs (of 11,325) | share |
+|---|---|---|
+| > 0.95 | 1 | 0.01% |
+| > 0.90 | 3 | 0.03% |
+| > 0.85 | 41 | 0.36% |
+| > 0.80 | 538 | 4.75% |
+
+Top offenders: electrode/voltorb **0.969**, kabuto/voltorb 0.921,
+electrode/kabuto 0.916, ditto/kabuto 0.894 — the predicted Voltorb/Electrode
+case is real and is the single most similar pair in the dataset.
+
+Confusions vs. similarity, over 385 top-1 errors:
+
+| | mean IoU |
+|---|---|
+| confused pairs (true vs. predicted) | 0.723 |
+| random class pairs | 0.693 |
+| **lift** | **1.04×** |
+
+| errors above IoU | share | random baseline |
+|---|---|---|
+| 0.90 | 2.1% | 0.0% |
+| 0.85 | 3.4% | 0.2% |
+| 0.80 | 13.2% | 4.4% |
+
+**The irreducible floor is small — the ceiling is not the problem.** Shape
+similarity predicts confusion only in the extreme tail: above IoU 0.85 the
+enrichment is ~17× over chance, but that tail covers just 3.4% of errors. The
+bulk mean lift is 1.04×, essentially nothing. **Genuine silhouette collisions
+explain a few percent of the 34.7% error rate, not most of it.**
+
+This contradicts the hypothesis raised when C7 failed — that much of the
+remaining error might be irreducible and C3-C6 therefore not worth running. It
+is not irreducible. The model is genuinely underperforming a task that is mostly
+solvable, so tuning is worth the effort after all.
+
+**Shape similarity does not explain the top-1/top-5 spread**, which was the
+specific question asked of this study:
+
+| error type | n | mean IoU of the wrong top-1 |
+|---|---|---|
+| true class still in top-5 | 204 | 0.723 |
+| true class outside top-5 | 181 | 0.723 |
+
+Identical to three decimals. So near-miss errors (right answer demoted to
+top-3/5) are **not** the silhouette-collision cases. The 18pt top-1/top-5 gap is
+not "the model correctly identifies a genuinely ambiguous pair and picks the
+wrong one" — it is something else, and an angular-margin loss motivated by
+"classes look alike" rests on a premise this does not support.
+
+Note also that only 53% of errors have the true class anywhere in the top-5, so
+nearly half are outright misses rather than near misses.
+
+**The frequent confusions are evolution lines, not shape twins:**
+pidgeot→pidgeotto (0.794), nidorino→nidoran-m (0.762), bulbasaur→ivysaur
+(0.844), zubat→golbat (0.638), ponyta→rapidash (0.658), caterpie→weedle (0.836),
+dragonair→dratini (0.595). Several have unremarkable IoU. These share a *body
+plan* while differing in size and detail — which the crude max-IoU metric does
+not capture. Worst classes: nidoran-m (0.00 accuracy), vaporeon (0.12),
+zubat (0.14), pidgeot (0.14), farfetchd (0.14).
+
+**Caveat on the metric.** Mean cross-class IoU is 0.697 with a median of 0.698 —
+scale-normalised filled blobs overlap heavily by construction, so the measure
+has poor dynamic range. A 1.04× lift may be attenuated by that rather than
+genuinely absent. The top-5-vs-lost comparison is the more robust finding, since
+both groups are scored by the same metric. Worth re-checking with a descriptor
+that captures body plan (turning-function distance, shape context, or IoU after
+per-image rotation alignment) before concluding the shape hypothesis is dead.
+
+- [ ] **Re-run with a body-plan-aware descriptor** before closing this question.
 - [ ] **Error rate by sprite generation.** Raw image size is a near-perfect
       generation proxy (56×56 = Gen 1 … 128×128 = Gen 6+). Are low-res early
       sprites disproportionately wrong? And does a *generation*-held-out split

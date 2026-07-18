@@ -1,0 +1,191 @@
+"""Does silhouette similarity explain the model's confusions?
+
+The model's top-5 accuracy (~0.84) sits ~18 points above its top-1 (~0.65): it
+usually shortlists the right class and then picks wrong. This asks whether that
+is the model's fault or the task's - i.e. how much of the error is between
+Pokemon whose silhouettes are genuinely near-identical (Voltorb/Electrode) and
+therefore irreducible from shape alone.
+
+    uv run python scripts/confusion_study.py [--run-name c2-resnet50-standard]
+
+Reads a run's `oof_predictions.json` (every image scored by a model that never
+trained on it) and compares the confusions against a shape-similarity matrix
+computed directly from the silhouettes.
+
+Similarity is computed on **bbox-cropped, scale-normalised** masks. Raw IoU
+would be dominated by the sprite-scale differences between generations (a
+Pokemon fills ~45% of the frame in Gen 1 and ~13% in Gen 6), which is a
+rendering artifact rather than a shape difference.
+"""
+
+import argparse
+import json
+from collections import Counter, defaultdict
+
+import mlflow
+import numpy as np
+from PIL import Image
+
+from pokemon_training.data import PROJECT_ROOT, load_dataset
+
+TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
+EXPERIMENT = "pokemon-classification-clean"
+NORMALIZED_SIZE = 64
+
+
+def normalized_silhouette(path, size=NORMALIZED_SIZE):
+    """Bbox-crop the creature, then resize to a fixed square: shape without scale."""
+    mask = np.array(Image.open(path).convert("L")) <= 127  # creature is dark on white
+    rows, cols = np.where(mask)
+    if len(rows) == 0:
+        return np.zeros((size, size), dtype=bool)
+
+    cropped = mask[rows.min() : rows.max() + 1, cols.min() : cols.max() + 1]
+    resized = Image.fromarray(cropped.astype(np.uint8) * 255).resize(
+        (size, size), Image.BILINEAR
+    )
+    return np.array(resized) > 127
+
+
+def iou(a, b):
+    union = (a | b).sum()
+    return (a & b).sum() / union if union else 0.0
+
+
+def load_oof(run_name):
+    mlflow.set_tracking_uri(TRACKING_URI)
+    client = mlflow.tracking.MlflowClient()
+    experiment = mlflow.get_experiment_by_name(EXPERIMENT)
+    matches = [
+        r
+        for r in client.search_runs([experiment.experiment_id], max_results=500)
+        if r.data.tags.get("mlflow.runName") == run_name and r.info.status == "FINISHED"
+    ]
+    if not matches:
+        raise SystemExit(f"no FINISHED run named {run_name} in {EXPERIMENT}")
+
+    path = client.download_artifacts(matches[0].info.run_id, "oof_predictions.json")
+    with open(path) as handle:
+        return json.load(handle)
+
+
+def class_similarity(dataset, classes):
+    """Max IoU between any two images of two different classes, per class pair.
+
+    Max rather than mean: the question is whether *some* rendering of A is
+    near-identical to *some* rendering of B, which is what makes a pair
+    confusable, not whether they match on average.
+    """
+    by_class = defaultdict(list)
+    for path, target in dataset.samples:
+        by_class[target].append(path)
+
+    shapes = {
+        label: [normalized_silhouette(p) for p in paths] for label, paths in by_class.items()
+    }
+
+    n = len(classes)
+    similarity = np.zeros((n, n))
+    for a in range(n):
+        for b in range(a + 1, n):
+            best = max(iou(x, y) for x in shapes[a] for y in shapes[b])
+            similarity[a, b] = similarity[b, a] = best
+
+    return similarity
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-name", default="c2-resnet50-standard")
+    parser.add_argument("--top-pairs", type=int, default=15)
+    args = parser.parse_args()
+
+    oof = load_oof(args.run_name)
+    classes = oof["classes"]
+    predictions = oof["predictions"]
+
+    dataset = load_dataset(PROJECT_ROOT / "data")
+    # Restrict to the images the run actually scored, so similarity is computed
+    # over the same non-shiny subset the model saw.
+    scored = {entry["index"] for entry in predictions}
+    dataset.samples = [s for i, s in enumerate(dataset.samples) if i in scored]
+
+    print(f"run: {args.run_name}   images: {len(predictions)}   classes: {len(classes)}")
+    print("computing pairwise shape similarity (bbox-cropped, scale-normalised)...")
+    similarity = class_similarity(dataset, classes)
+
+    upper = similarity[np.triu_indices(len(classes), k=1)]
+    print(f"\ncross-class similarity over {len(upper):,} pairs:")
+    print(f"  mean {upper.mean():.3f}   median {np.median(upper):.3f}   max {upper.max():.3f}")
+    for threshold in (0.95, 0.90, 0.85, 0.80, 0.75):
+        count = int((upper > threshold).sum())
+        print(f"  pairs above IoU {threshold}: {count:>5}  ({count / len(upper):.2%})")
+
+    print("\nmost similar class pairs (different Pokemon, near-identical shape):")
+    order = np.argsort(upper)[::-1]
+    pairs = [(i, j) for i in range(len(classes)) for j in range(i + 1, len(classes))]
+    for rank in order[: args.top_pairs]:
+        i, j = pairs[rank]
+        print(f"  {upper[rank]:.3f}  {classes[i]} / {classes[j]}")
+
+    # --- confusions -------------------------------------------------------
+    errors = [e for e in predictions if e["top5"][0] != e["label"]]
+    in_top3 = [e for e in errors if e["label"] in e["top5"][:3]]
+    in_top5 = [e for e in errors if e["label"] in e["top5"]]
+
+    error_rate = len(errors) / len(predictions)
+    print(f"\ntop-1 errors: {len(errors)} / {len(predictions)} ({error_rate:.1%})")
+    print(f"  recovered in top-3: {len(in_top3)} ({len(in_top3) / len(errors):.1%})")
+    print(f"  recovered in top-5: {len(in_top5)} ({len(in_top5) / len(errors):.1%})")
+
+    confused_sim = np.array([similarity[e["label"]][e["top5"][0]] for e in errors])
+    correct = [e for e in predictions if e["top5"][0] == e["label"]]
+    # Baseline: how similar is a class to a randomly chosen other class?
+    rng = np.random.default_rng(0)
+    random_sim = np.array(
+        [
+            similarity[e["label"]][rng.integers(len(classes))]
+            for e in predictions
+            for _ in range(3)
+        ]
+    )
+
+    print("\nshape similarity, wrong prediction vs true class:")
+    print(f"  confused: mean {confused_sim.mean():.3f} median {np.median(confused_sim):.3f}")
+    print(f"  random:   mean {random_sim.mean():.3f} median {np.median(random_sim):.3f}")
+    print(f"  lift: {confused_sim.mean() / random_sim.mean():.2f}x")
+
+    for threshold in (0.90, 0.85, 0.80):
+        share = float((confused_sim > threshold).mean())
+        base = float((random_sim > threshold).mean())
+        print(f"  above IoU {threshold}: {share:.1%} (random {base:.1%})")
+
+    print("\nmost frequent confusions (true -> predicted, with shape similarity):")
+    counts = Counter((e["label"], e["top5"][0]) for e in errors)
+    for (true, pred), count in counts.most_common(args.top_pairs):
+        sim = similarity[true][pred]
+        print(f"  {count:>3}x  {classes[true]:>14} -> {classes[pred]:<14} IoU {sim:.3f}")
+
+    # Does high similarity predict "right answer demoted to top-3/5" rather than lost?
+    recovered_sim = np.array([similarity[e["label"]][e["top5"][0]] for e in in_top5])
+    lost = [e for e in errors if e["label"] not in e["top5"]]
+    lost_sim = np.array([similarity[e["label"]][e["top5"][0]] for e in lost])
+    print(f"\nerror, true class in top-5: mean IoU {recovered_sim.mean():.3f} (n={len(in_top5)})")
+    if len(lost):
+        print(f"error, fell outside top-5: mean IoU {lost_sim.mean():.3f} (n={len(lost)})")
+
+    per_class_correct = Counter(e["label"] for e in correct)
+    per_class_total = Counter(e["label"] for e in predictions)
+    accuracy_by_class = {
+        c: per_class_correct[c] / per_class_total[c] for c in per_class_total
+    }
+    worst = sorted(accuracy_by_class.items(), key=lambda kv: kv[1])[:12]
+    print("\nworst classes (accuracy, closest other class):")
+    for label, acc in worst:
+        nearest = int(np.argmax(similarity[label]))
+        sim = similarity[label][nearest]
+        print(f"  {acc:.2f}  {classes[label]:>14}  nearest: {classes[nearest]} (IoU {sim:.3f})")
+
+
+if __name__ == "__main__":
+    main()
