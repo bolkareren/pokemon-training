@@ -14,8 +14,22 @@ class ExperimentConfig:
     # Data
     data_dir: Path | None = None  # defaults to <project_root>/data when unset
     batch_size: int = 16
-    val_size: float = 0.1
-    test_size: float = 0.1
+    # 0.15, not 0.1: with shiny sprites excluded the dataset is 1307 images over
+    # 151 classes, and a 10% split (131) is smaller than the class count, which
+    # makes a stratified split impossible. See EXPERIMENTS.md Phase 12.
+    val_size: float = 0.15
+    test_size: float = 0.15
+    # Drop shiny sprites, which are recolours of the normal sprites and so have
+    # duplicate silhouettes. Leaving them in put a pixel-identical twin in train
+    # for ~62% of the validation set. See EXPERIMENTS.md Phase 11.
+    exclude_shiny: bool = True
+    # 0 runs a single train/val/test split. K > 0 cross-validates: the test split
+    # is held out first, then K folds over the rest, reported as mean +/- SE over
+    # pooled out-of-fold predictions. A single 196-image val split cannot resolve
+    # the few-point differences these experiments compare.
+    folds: int = 0
+    # Keep near-duplicate silhouettes (IoU > 0.97) within a single fold.
+    group_aware_folds: bool = True
     # Single global seed for the run: the stratified split, all RNGs
     # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
     random_state: int = 42
@@ -49,6 +63,9 @@ class ExperimentConfig:
     epochs: int = 16
 
     # Tracking
-    experiment_name: str = "pokemon-classification"
+    # Separate from the leaky-split "pokemon-classification" experiment, whose
+    # accuracies mean something different and are not comparable. See
+    # EXPERIMENTS.md vs LEAKY-EXPERIMENTS.md.
+    experiment_name: str = "pokemon-classification-clean"
     run_name: str | None = None
     save_model: bool = False
