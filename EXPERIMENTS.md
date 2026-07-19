@@ -50,6 +50,7 @@ and none of its numbers are comparable to anything here.
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 | edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
 | LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4, 32-epoch horizon; the historical 4e-4 collapse was a warmup artifact | p2-* |
+| reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
 
 **Current best: 0.716, two-seed mean of the config defaults** (`(mask, sdt,
 mask)` input + cosine/warmup/restore at blr 4e-4 over 32 epochs: 0.725 at seed
@@ -86,7 +87,38 @@ Also measured, and load-bearing:
 # Roadmap
 
 Phases run in order. Every phase: single model, 5-fold grouped CV, 2× SEM bar,
-second seed on anything that would change a default.
+second seed on anything that would change a default. **Exploration protocol:**
+cheap single-factor tests run at `--epochs 16` (paired reference `p2-blr4e-4`,
+0.707 at seed 42); winners are re-run at the full 32-epoch default.
+
+## Next session — start here
+
+Phases 1-3 are done (1 and 3 negative, 2 the big win). In priority order:
+
+1. **Leak decomposition** — the gate for the data lever, likely one flag combo:
+   ```bash
+   uv run python scripts/training.py --run-name p5-leak-decomposition --folds 5 --epochs 16 --no-exclude-shiny
+   ```
+   First verify the group-aware folds catch every exact duplicate (shiny twins
+   are IoU 1.0 within the same class, so `near_duplicate_groups` should cluster
+   them — confirm with `duplicate_audit.py` or a direct check that no val image
+   has an exact twin in train). Score it two ways: raw pooled OOF, and filtered
+   to normal-series indices (post-hoc, from `oof_predictions.json`) for the
+   number comparable to `p2-blr4e-4` (0.707). A clear positive → all-gen
+   scraping/pretraining becomes the top priority; a null is only a weak
+   negative (duplicates carry less information than novel sprites).
+2. **Cheap flags-only Phase 5 items**, any order, all at the 16-epoch protocol:
+   duplicate-mask hypothesis (`--input-channels sdt mask sdt` and friends),
+   schedule residue (`--backbone-lr 8e-4`; `--epochs 64` at full protocol),
+   depth re-sweep (`--train-last-n-layers 2|4|6`), weight decay sweep.
+3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
+   sketch/quickdraw checkpoint; the loading-order fix in
+   `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
+4. **Phase 6 (final)** once the above settle: TTA, seed-ensemble-within-fold
+   (needs logits persisted in `evaluation.py`), then the one-shot test split.
+
+State as of the end of the last session: best 0.716 (two-seed mean of the
+defaults; 0.725 at seed 42), tree clean, all results in the table above.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -170,10 +202,18 @@ first matters here: stem changes shift early-layer statistics, and constant-LR
 training near the instability boundary would have confounded the comparison.
 Compute note: larger early feature maps multiply the now-40-min default run.
 
-- [ ] **p3-nomaxpool** — drop the stem maxpool (cheapest; 2× feature maps).
-- [ ] **p3-stride1-conv** — also conv1 stride 1 if compute allows (4× maps).
-- [ ] Interpret jointly with Phase 1: edge-channel gain and stem gain should
-      be partially redundant if the thin-feature diagnosis is right.
+- [x] **p3-nomaxpool** — `--stem nomaxpool --epochs 16`: **0.699, −0.8pt vs
+      the paired 16-epoch reference (`p2-blr4e-4`, 0.707) at −0.4× SEM**, for
+      2.8× the compute (56 min). Mixed fold signs (2 up, 3 down).
+- [x] **p3-stride1-conv** — **not run**: gated on nomaxpool showing ≥1× SEM
+      signal, which it did not. The `stem` config option remains for later use.
+
+**Verdict: the stem is not the bottleneck.** Third strike for the thin-feature
+hypothesis (sparse curv channel dead, edge channel retired, now doubled stem
+resolution flat-negative): at this data scale the network is not starved of
+contour detail. Whatever separates 0.72 from the ceiling lives elsewhere —
+consistent with the diversity measurement (high variance in *what* gets
+learned) pointing at data quantity, which the leak decomposition tests next.
 
 ## Phase 4 — Sketch-pretrained backbones (+ edge)
 

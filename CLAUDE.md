@@ -14,7 +14,8 @@ n=1110, two-seed mean of the config defaults — SDT input channel plus
 cosine/warmup/restore-best at blr 4e-4 over 32 epochs, all confirmed). Read
 [EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting any experiment
 — it holds the protocol, all measured results, and the active roadmap
-(currently Phase 3: reduced-stride stem).
+(see its "Next session" section: leak decomposition first, then the
+data-vs-checkpoint fork it gates).
 
 ## Commands
 
