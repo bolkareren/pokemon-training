@@ -9,11 +9,12 @@ silhouettes, for a "Who's That Pokémon?" style guessing game. Sprites are
 scraped from pokemondb.net, converted to silhouettes, and used to fine-tune a
 torchvision backbone.
 
-**Current best: 0.677 out-of-fold accuracy** (single model, 5-fold grouped CV,
-n=1110, mean over four seeds of the config defaults — the SDT input channel is
-confirmed and default). Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
-interpreting any experiment — it holds the protocol, all measured results, and
-the active roadmap (currently Phase 1: edge third-channel).
+**Current best: 0.716 out-of-fold accuracy** (single model, 5-fold grouped CV,
+n=1110, two-seed mean of the config defaults — SDT input channel plus
+cosine/warmup/restore-best at blr 4e-4 over 32 epochs, all confirmed). Read
+[EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting any experiment
+— it holds the protocol, all measured results, and the active roadmap
+(currently Phase 3: reduced-stride stem).
 
 ## Commands
 
