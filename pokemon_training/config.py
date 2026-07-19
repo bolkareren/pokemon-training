@@ -55,6 +55,27 @@ class ExperimentConfig:
     affine_translate: float = 0.2
     affine_scale: tuple[float, float] = (0.85, 1.15)
 
+    # Per-channel input encoding, replacing the three redundant copies of the
+    # binary mask (two thirds of input capacity carried no information). Applied
+    # identically at train and eval time - this is the input representation, not
+    # an augmentation. Everything is derived from the silhouette alone, so it
+    # stays deployable on an arbitrary input. Options:
+    #   "mask" - the thresholded silhouette (creature = 1)
+    #   "sdt"  - signed distance transform, fixed global scale, in [0, 1]
+    #   "curv" - morphological curvature proxy (protrusions vs concavities)
+    # N2 measured ("mask", "sdt", "mask") at +1.9pt pooled over four paired
+    # comparisons (~2.0x SEM) but only 0.9x against this default's polarity, so
+    # the default stays all-mask until that confirms. "curv" measured dead.
+    # See EXPERIMENTS.md Phase N2.
+    input_channels: tuple[str, str, str] = ("mask", "mask", "mask")
+    # Polarity of emitted "mask" channels. False (the default, background = 1)
+    # is the original convention every pre-N2 result used; True (creature = 1)
+    # was measured at ~3pt worse across two paired seeds (n2-mask-inverted vs
+    # the same-seed baselines, ~2.3x combined SEM). Derived channels ("sdt",
+    # "curv") always treat the creature as inside, independent of this flag.
+    # See EXPERIMENTS.md Phase N2.
+    invert_mask: bool = False
+
     # Single global seed for the run: the stratified split, all RNGs
     # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
     random_state: int = 42
@@ -102,8 +123,8 @@ class ExperimentConfig:
     save_model: bool = False
 
     @property
-    def augmentations(self) -> dict[str, bool | float | tuple[float, float]]:
-        """Augmentation flags in the form `get_transforms` expects."""
+    def augmentations(self) -> dict[str, bool | float | tuple]:
+        """Transform options in the form `get_transforms` expects."""
         return {
             "hflip": self.augment_hflip,
             "morphological": self.augment_morphological,
@@ -112,4 +133,6 @@ class ExperimentConfig:
             "affine_degrees": self.affine_degrees,
             "affine_translate": self.affine_translate,
             "affine_scale": self.affine_scale,
+            "input_channels": self.input_channels,
+            "invert_mask": self.invert_mask,
         }

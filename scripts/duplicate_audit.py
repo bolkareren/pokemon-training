@@ -82,8 +82,7 @@ def audit_split_leakage(silhouettes, targets, dataset, seed):
         1
         for i in val_idx
         if any(
-            iou(silhouettes[i], t) > NEAR_DUPLICATE_IOU
-            for t in train_by_class.get(targets[i], [])
+            iou(silhouettes[i], t) > NEAR_DUPLICATE_IOU for t in train_by_class.get(targets[i], [])
         )
     )
 

@@ -96,8 +96,10 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
         set_random_seed(config.random_state)
         model, optimizer, _ = build_model_and_optimizer(config, num_classes, weights_checkpoint)
 
-        print(f"\n=== fold {fold + 1}/{config.folds} "
-              f"(train {len(train_loader.dataset)}, val {len(val_loader.dataset)}) ===")
+        print(
+            f"\n=== fold {fold + 1}/{config.folds} "
+            f"(train {len(train_loader.dataset)}, val {len(val_loader.dataset)}) ==="
+        )
         history = train_outer_loop(
             model=model,
             train_loader=train_loader,
@@ -159,9 +161,7 @@ def main(config: ExperimentConfig) -> None:
     classes = reference_dataset.classes
     num_classes = len(classes)
 
-    reference_model, _, weights = build_model_and_optimizer(
-        config, num_classes, weights_checkpoint
-    )
+    reference_model, _, weights = build_model_and_optimizer(config, num_classes, weights_checkpoint)
     trainable_parameters = sum(p.numel() for p in reference_model.parameters() if p.requires_grad)
     total_parameters = sum(p.numel() for p in reference_model.parameters())
 
@@ -227,9 +227,7 @@ def main(config: ExperimentConfig) -> None:
             print(f"validation_batches: {len(val_loader)}")
             print(f"test_batches: {len(test_loader)}")
 
-            model, optimizer, _ = build_model_and_optimizer(
-                config, num_classes, weights_checkpoint
-            )
+            model, optimizer, _ = build_model_and_optimizer(config, num_classes, weights_checkpoint)
             criterion = torch.nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
 
             history = train_outer_loop(

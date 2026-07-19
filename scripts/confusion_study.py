@@ -104,9 +104,7 @@ def normalized_silhouette(path, size=NORMALIZED_SIZE):
         return np.zeros((size, size), dtype=bool)
 
     cropped = mask[rows.min() : rows.max() + 1, cols.min() : cols.max() + 1]
-    resized = Image.fromarray(cropped.astype(np.uint8) * 255).resize(
-        (size, size), Image.BILINEAR
-    )
+    resized = Image.fromarray(cropped.astype(np.uint8) * 255).resize((size, size), Image.BILINEAR)
     return np.array(resized) > 127
 
 
@@ -143,9 +141,7 @@ def class_similarity(dataset, classes):
     for path, target in dataset.samples:
         by_class[target].append(path)
 
-    shapes = {
-        label: [normalized_silhouette(p) for p in paths] for label, paths in by_class.items()
-    }
+    shapes = {label: [normalized_silhouette(p) for p in paths] for label, paths in by_class.items()}
 
     n = len(classes)
     similarity = np.zeros((n, n))
@@ -191,13 +187,13 @@ def report_evolution_line_confusions(errors, classes, top_pairs):
     within = [e for e in errors if family[e["label"]] == family[e["top5"][0]]]
 
     family_size = Counter(family.values())
-    chance = np.mean(
-        [(family_size[family[e["label"]]] - 1) / (len(classes) - 1) for e in errors]
-    )
+    chance = np.mean([(family_size[family[e["label"]]] - 1) / (len(classes) - 1) for e in errors])
 
     rate = len(within) / len(errors)
-    print(f"\nevolution-line confusions: {len(within)} / {len(errors)} errors "
-          f"({rate:.1%}, chance {chance:.1%}, lift {rate / chance:.0f}x)")
+    print(
+        f"\nevolution-line confusions: {len(within)} / {len(errors)} errors "
+        f"({rate:.1%}, chance {chance:.1%}, lift {rate / chance:.0f}x)"
+    )
     counts = Counter((e["label"], e["top5"][0]) for e in within)
     for (true, pred), count in counts.most_common(top_pairs):
         print(f"  {count:>3}x  {classes[true]:>14} -> {classes[pred]}")
@@ -252,11 +248,7 @@ def main():
     # Baseline: how similar is a class to a randomly chosen other class?
     rng = np.random.default_rng(0)
     random_sim = np.array(
-        [
-            similarity[e["label"]][rng.integers(len(classes))]
-            for e in predictions
-            for _ in range(3)
-        ]
+        [similarity[e["label"]][rng.integers(len(classes))] for e in predictions for _ in range(3)]
     )
 
     print("\nshape similarity, wrong prediction vs true class:")
@@ -287,9 +279,7 @@ def main():
 
     per_class_correct = Counter(e["label"] for e in correct)
     per_class_total = Counter(e["label"] for e in predictions)
-    accuracy_by_class = {
-        c: per_class_correct[c] / per_class_total[c] for c in per_class_total
-    }
+    accuracy_by_class = {c: per_class_correct[c] / per_class_total[c] for c in per_class_total}
     worst = sorted(accuracy_by_class.items(), key=lambda kv: kv[1])[:12]
     print("\nworst classes (accuracy, closest other class):")
     for label, acc in worst:

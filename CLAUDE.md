@@ -12,9 +12,11 @@ torchvision backbone (ResNet-18/34/50).
 **Current state: 0.653 out-of-fold accuracy**, single model under 5-fold grouped
 CV over 1110 images. Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
 interpreting any experiment — particularly "Results so far" and "Noise floor".
-The active plan resumes at **Phase N2, as rescoped by N1** (N1 rejected the
-scale-cue hypothesis: `n2-multichannel` and `n2-aspect-preserved-crop` are the
-live items; `n2-contour-sequence` is dropped).
+The active plan is mid-**Phase N2**: `n2-multichannel` is done (SDT channel
+suggestive at +1.9pt pooled but unconfirmed — two more paired seeds settle it;
+curvature proxy dead; mask polarity alone measured at ~3pt). Next is either
+that confirmation or `n2-aspect-preserved-crop`; `n2-contour-sequence` is
+dropped per N1's verdict.
 
 ## Commands
 
@@ -146,8 +148,11 @@ Measured, and load-bearing for the current plan:
   N1 subtracted each component and nothing cleared 2× SEM. Removing the scale
   jitter — hypothesised to be destroying the Pidgey-vs-Pidgeot size cue — moved
   neither accuracy nor evolution-line confusions. The size cue is not load-bearing.
-- **The 3 input channels hold identical copies of the same binary mask**, so two
-  thirds of input capacity is redundant. Phase N2 fills it.
+- **The 3 input channels are configurable** (`input_channels`: mask/sdt/curv,
+  plus `invert_mask` for polarity). Measured in N2: mask polarity is worth ~3pt
+  (background = 1, the default, wins); an SDT channel trends +1.9pt pooled but
+  is unconfirmed; the curvature proxy is dead (too sparse to survive the stem's
+  4× downsample). Defaults remain all-mask, background = 1.
 - **Evolution-line confusions are 12.7% of all top-1 errors** at a 0.9% chance
   rate (15× lift; `confusion_study.py` reports this per run) — real and
   concentrated, but N1 showed it is not a size-cue problem.

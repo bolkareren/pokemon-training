@@ -669,6 +669,7 @@ per-image rotation alignment) before concluding the shape hypothesis is dead.
 | C9 | is the error irreducible? | no — shape collisions explain ~3% of errors, not most | ceiling is not the limit |
 | C3 (partial) | is label smoothing hurting top-1? | no — removing it costs 3.5pt | hypothesis wrong |
 | N1 | is the affine destroying the size cue? | no — removing scale jitter moves neither accuracy nor evolution-line confusions | no gain; N2 rescoped |
+| N2 (multichannel) | does a richer input encoding help? | SDT +1.9pt pooled (2.0×) but 0.9× vs the real default — unconfirmed; mask polarity alone worth ~3pt; curv proxy dead | no confirmed gain |
 
 **One real gain in the entire investigation: +5.7pt, from dropping the
 shape-biased checkpoint.** Everything else either did nothing or was a
@@ -677,7 +678,9 @@ of the value so far has been in finding out that 0.906 meant 0.617, not in
 moving the number upward.
 
 Current best: **0.653** (`c2-resnet50-standard`, which is now the default
-config), SEM 0.013, train/val gap +0.977.
+config), SEM 0.013, train/val gap +0.977. The best *candidate* is
+`--input-channels mask sdt mask` at 0.674/0.666 over two seeds — sign-consistent
+but below the significance bar; see the N2 results before promoting it.
 
 ### What the failures collectively point at
 
@@ -851,16 +854,22 @@ through thickness, protrusions, and resolution instead.
 `n2-proportion-branch` deprioritised; `n2-multichannel` and
 `n2-aspect-preserved-crop` are the live items, in that order.
 
+**Status: `n2-multichannel` is done** — see its results subsection below. The
+SDT channel is the most promising unconfirmed lead in the file (+1.9pt pooled
+over four paired comparisons, ~2.0× SEM, but only 0.9× on the pairing that
+matters); the curvature proxy is dead; and the phase's accidental headline is
+that **mask polarity alone is worth ~3pt**. Defaults are unchanged.
+
 The input is a binary mask replicated across three identical channels, so **two
 thirds of the input capacity is redundant**, and the only information reaching
 the network is "inside or outside". Everything here is derived from the
 silhouette alone, so all of it is deployable on an arbitrary input.
 
-- [ ] **n2-multichannel** — mask, signed distance transform, boundary curvature.
+- [x] **n2-multichannel** — mask, signed distance transform, boundary curvature.
       The distance transform encodes thickness and the medial axis, i.e.
       proportion; curvature encodes protrusions — crests, tails, spikes — which
       is exactly where similar body plans differ. Free capacity, same
-      architecture. Highest value-to-effort here.
+      architecture. Highest value-to-effort here. **Done — results below.**
 - [ ] **n2-aspect-preserved-crop** — bbox-crop fitting the longer side and
       padding the shorter, so effective resolution rises (late-generation sprites
       currently waste most of the frame on padding) while aspect ratio survives
@@ -877,6 +886,92 @@ silhouette alone, so all of it is deployable on an arbitrary input.
       branch. Genuinely complementary to a 2-D CNN, and Fourier descriptors of it
       let you choose which invariances to keep — unlike the 2-D CNN you can
       deliberately *retain* the scale term. Build only if N1 shows scale matters.
+
+### n2-multichannel — results
+
+Implementation: `input_channels: tuple[str, str, str]` (default all `"mask"`)
+selects per-channel encodings, built by a `SilhouetteChannels` transform that
+runs after `RandomMorphology` and before `Normalize` in **both** train and eval
+branches — this is the input representation, not augmentation. `"sdt"` is a
+signed distance transform at a fixed 64px scale mapped into [0, 1] (0.5 on the
+boundary); `"curv"` is a morphological proxy (7px opening top-hat vs closing
+bottom-hat, values {0, 0.5, 1}). Everything derives from the silhouette alone,
+so it deploys on an arbitrary input. SDT runs cost ~+30% wall time (~22 min vs
+17).
+
+**The accidental headline: mask polarity is worth ~3pt.** The first
+implementation also flipped the threshold to creature = 1 (the convention the
+derived channels use internally). That inversion is information-free — a single
+affine reparameterization of the input — and it still cost ~3 points, confirmed
+by paired same-seed comparisons at two seeds:
+
+| pairing (all-mask) | background = 1 | creature = 1 | delta |
+|---|---|---|---|
+| seed 42 | 0.653 | 0.626 | −2.7pt |
+| seed 43 | 0.662 | 0.630 | −3.3pt |
+
+Pooled ~−3.0pt at ~2.3× combined SEM: **confirmed**. Polarity is now a config
+field (`invert_mask`), defaulting to the original background = 1 convention;
+the default pipeline is verified byte-identical to the pre-N2 transform. Two
+lessons: pretrained features are sensitive to representational choices that
+carry zero information (ImageNet backgrounds are not usually the bright,
+uniform, majority region), and an unmeasured implementation convenience would
+have silently poisoned every later comparison had the `n2-mask-inverted`
+control not been run.
+
+**Channel results** (five distinct configs, eight runs):
+
+| run | channels | mask polarity | seed | oof top-1 | SEM | per-fold |
+|---|---|---|---|---|---|---|
+| **n2-origmask-sdt** | mask,sdt,mask | background | 42 | **0.674** | 0.005 | 0.671 0.671 0.658 0.685 0.685 |
+| n2-origmask-sdt-seed43 | mask,sdt,mask | background | 43 | 0.666 | 0.017 | 0.631 0.662 0.667 0.730 0.640 |
+| n2-sdt | mask,sdt,mask | creature | 42 | 0.654 | 0.011 | 0.635 0.653 0.626 0.676 0.680 |
+| n2-sdt-seed43 | mask,sdt,mask | creature | 43 | 0.654 | 0.019 | — |
+| n2-sdt-curv | mask,sdt,curv | creature | 42 | 0.641 | 0.009 | 0.644 0.658 0.608 0.649 0.644 |
+| n2-curv | mask,mask,curv | creature | 42 | 0.635 | 0.011 | 0.640 0.608 0.635 0.671 0.622 |
+| n2-mask-inverted | mask ×3 | creature | 42 | 0.626 | 0.012 | 0.658 0.622 0.586 0.640 0.626 |
+| n2-mask-inverted-seed43 | mask ×3 | creature | 43 | 0.630 | 0.011 | — |
+
+**SDT: consistently positive, not confirmed.** Four independent paired
+comparisons (SDT config vs its same-seed, same-polarity all-mask reference):
+
+| polarity | seed | delta | × combined SEM |
+|---|---|---|---|
+| creature | 42 | +2.8pt | +1.75 |
+| creature | 43 | +2.4pt | +1.12 |
+| background | 42 | +2.1pt | +1.50 |
+| background | 43 | +0.4pt | +0.15 |
+
+Sign-consistent 4/4, pooled **+1.9pt at ~2.0× SEM** — but the two pairings
+that measure a *net* gain over the actual default (background polarity) pool to
+only **+1.25pt at 0.9×**, dragged down by the seed-43 replication. Per the
+pre-registered rule the default does **not** change. The mechanism moved the
+right way on the best run (errors 385 → 362; evolution-line confusions 12.7% →
+11.3% of errors) and its fold spread (SEM 0.005) is the tightest in the clean
+experiment, but the honest summary is: *the most promising unconfirmed lead in
+this file*, not a gain. Settling it costs two more paired runs (seeds 44/45,
+~45 min); the inverted-polarity pairs also suggest part of SDT's value is
+repairing representational inconvenience rather than adding information.
+
+**The curvature proxy is dead, and the diagnosis matters more than the number.**
+Alone it adds +0.9pt over its control (0.6×); combined it *dilutes* SDT (0.641
+vs 0.654). On a typical silhouette it marks ~0.3% of pixels in 1-3px slivers
+with hard ternary values — features mostly destroyed by the stem's immediate 4×
+downsample before any residual block sees them. The negative result therefore
+says "sparse spiky encodings don't survive the stem", not "curvature is
+useless". Recorded candidates for a better third channel, none yet tested:
+
+- **Level-set curvature of the EDT field** (`div(∇φ/|∇φ|)` via two
+  `numpy.gradient` calls) — dense, smooth, boundary curvature near the contour,
+  no new dependencies. The principled retry.
+- **Thick edge band** (`exp(−d²/2σ²)`, σ ≈ 8px so ~2px survive the stem) — the
+  input-side workaround for stem downsampling; mutually informative with
+  `n3-reduced-stride-stem`, which is the architecture-side fix for the same
+  mechanism. Caveat: pointwise in the SDT, so next to an SDT channel it adds
+  representational convenience only — though the polarity result is a direct
+  demonstration that convenience can be worth points.
+- **Gaussian-blurred mask** (σ ≈ 8-16px) — coarse body-plan channel; partially
+  redundant with SDT near the boundary.
 
 Explicitly **not** planned: replacing the CNN with HOG or edge-gradient features.
 On a binary silhouette gradients exist only at the boundary, so HOG reduces to a

@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
+from scipy import ndimage
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
@@ -63,6 +64,84 @@ class RandomMorphology:
         return out.squeeze(0)
 
 
+class SilhouetteChannels:
+    """Encode the binary mask into per-channel silhouette descriptors.
+
+    The default input replicates the mask across all three channels, so two
+    thirds of input capacity carries nothing. Each channel is independently one
+    of:
+
+    - "mask": the thresholded silhouette itself. Emitted with background = 1
+        by default - the original convention every pre-N2 result used, measured
+        ~3pt better than creature = 1 (see EXPERIMENTS.md N2) - or creature = 1
+        when invert_mask is set.
+    - "sdt": signed distance transform - per-pixel distance to the boundary,
+        positive inside, at a fixed global scale of SDT_SCALE pixels mapped into
+        [0, 1] (0.5 on the boundary). Fixed rather than per-image so absolute
+        thickness survives; encodes limb/neck thickness and the medial axis.
+    - "curv": morphological curvature proxy - opening top-hat (thin protrusions
+        the opening removes) minus closing bottom-hat (thin concavities the
+        closing fills), around a 0.5 background. Values {0, 0.5, 1}: bright where
+        the contour juts out (crests, tails, spikes), dark where it cuts in.
+
+    This is the input representation, not augmentation: it applies identically
+    at train and eval time, and runs after RandomMorphology so derived channels
+    describe the mask the network actually sees.
+    """
+
+    VALID = ("mask", "sdt", "curv")
+    # Distance scale in pixels. Inside distances on a 224px canvas peak around
+    # 60-70px for the fattest Gen 1 blobs, so 64 spends the [0, 1] range on the
+    # occupied part of it without clipping much.
+    SDT_SCALE = 64.0
+    # Structuring element for the curvature proxy: captures features up to
+    # ~3px radius, one notch above RandomMorphology's 1-2px perturbations so
+    # that augmentation doesn't erase the signal this channel encodes.
+    CURV_KERNEL = 7
+
+    def __init__(self, channels=("mask", "mask", "mask"), invert_mask=False):
+        unknown = set(channels) - set(self.VALID)
+        if unknown:
+            raise ValueError(f"unknown input channels {sorted(unknown)}; valid: {self.VALID}")
+        self.channels = tuple(channels)
+        self.invert_mask = invert_mask
+
+    def _sdt(self, mask):
+        inside = mask.numpy() > 0.5
+        signed = ndimage.distance_transform_edt(inside) - ndimage.distance_transform_edt(~inside)
+        scaled = 0.5 + signed / (2.0 * self.SDT_SCALE)
+        return torch.from_numpy(scaled).clamp(0.0, 1.0).float()
+
+    def _curv(self, mask):
+        # scipy's separable min/max filters, not F.max_pool2d: a dense 7x7 max
+        # pool costs ~30ms/image on CPU, which would triple epoch time in the
+        # zero-worker DataLoader. This is ~1ms for the same morphology.
+        inside = mask.numpy() > 0.5
+        kernel = self.CURV_KERNEL
+        opening = ndimage.maximum_filter(ndimage.minimum_filter(inside, kernel), kernel)
+        closing = ndimage.minimum_filter(ndimage.maximum_filter(inside, kernel), kernel)
+
+        out = np.full(inside.shape, 0.5, dtype=np.float32)
+        out[inside & ~opening] = 1.0  # opening top-hat: thin protrusions
+        out[closing & ~inside] = 0.0  # closing bottom-hat: thin concavities
+        return torch.from_numpy(out)
+
+    def __call__(self, x):
+        # The incoming tensor is creature = 1 (the internal representation the
+        # derived channels are defined on); polarity applies only on emission.
+        if all(channel == "mask" for channel in self.channels):
+            return x if self.invert_mask else 1.0 - x
+
+        mask = x[0]
+        cache = {"mask": mask if self.invert_mask else 1.0 - mask}
+        built = []
+        for channel in self.channels:
+            if channel not in cache:
+                cache[channel] = getattr(self, f"_{channel}")(mask)
+            built.append(cache[channel])
+        return torch.stack(built)
+
+
 def get_transforms(
     hflip=False,
     morphological=False,
@@ -71,6 +150,8 @@ def get_transforms(
     affine_degrees=20.0,
     affine_translate=0.2,
     affine_scale=(0.85, 1.15),
+    input_channels=("mask", "mask", "mask"),
+    invert_mask=False,
 ):
     """Build (train, eval) transforms. Each augmentation is independently togglable.
 
@@ -98,13 +179,21 @@ def get_transforms(
         geometric.append(transforms.RandomHorizontalFlip(p=0.5))
 
     mask_ops = [RandomMorphology()] if morphological else []
+    # Internal representation: creature = 1, background = 0 - what the derived
+    # channels are defined on. SilhouetteChannels flips emitted mask channels
+    # back to the original background = 1 polarity unless invert_mask is set;
+    # polarity is not a symmetry of conv+BN+ReLU on pretrained weights, and
+    # creature = 1 measured ~3pt worse across two seeds (EXPERIMENTS.md N2).
+    threshold = transforms.Lambda(lambda x: (x < 0.5).float())
+    encode = SilhouetteChannels(input_channels, invert_mask=invert_mask)
 
     train_transform = transforms.Compose(
         [
             *geometric,
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: (x > 0.5).float()),
+            threshold,
             *mask_ops,
+            encode,
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
@@ -115,7 +204,8 @@ def get_transforms(
     test_transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: (x > 0.5).float()),
+            threshold,
+            encode,
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
@@ -222,9 +312,7 @@ def fold_indices(dataset, indices, folds, random_state=42, group_aware=True):
     """
     indices = np.asarray(indices)
     targets = np.array(dataset.targets)[indices]
-    groups = (
-        near_duplicate_groups(dataset, indices) if group_aware else np.arange(len(indices))
-    )
+    groups = near_duplicate_groups(dataset, indices) if group_aware else np.arange(len(indices))
 
     splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=random_state)
     for train_positions, val_positions in splitter.split(indices, targets, groups):
@@ -308,9 +396,7 @@ def create_fold_data_loaders(
     train_transform, test_transform = get_transforms(**(augmentations or {}))
     base_dataset = load_dataset(data_dir)
     indices = (
-        _normal_sprite_indices(base_dataset)
-        if exclude_shiny
-        else np.arange(len(base_dataset))
+        _normal_sprite_indices(base_dataset) if exclude_shiny else np.arange(len(base_dataset))
     )
     targets = np.array(base_dataset.targets)
 
