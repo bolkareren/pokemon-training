@@ -25,5 +25,8 @@ build-backend = "hatchling.build"
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.format]
+indent-style = "tab"
+
 [tool.ruff.lint]
 select = ["E", "F", "I"]
