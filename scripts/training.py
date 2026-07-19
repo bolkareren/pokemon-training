@@ -105,6 +105,9 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 			epochs=config.epochs,
 			device=device,
 			batch_norm_mode=config.batch_norm_mode,
+			scheduler_type=config.scheduler,
+			warmup_epochs=config.warmup_epochs,
+			restore_best_epoch=config.restore_best_epoch,
 		)
 
 		predictions, labels = predict_top_k(model, val_loader, k=5, device=device)
@@ -118,7 +121,10 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 			for i, label, prediction in zip(val_idx, labels, predictions)
 		)
 
-		mlflow.log_metrics({"fold_accuracy": fold_accuracy, "fold_gap": gap}, step=fold)
+		fold_metrics = {"fold_accuracy": fold_accuracy, "fold_gap": gap}
+		if "best_epoch" in history:
+			fold_metrics["fold_best_epoch"] = history["best_epoch"]
+		mlflow.log_metrics(fold_metrics, step=fold)
 		print(f"fold {fold + 1} accuracy: {fold_accuracy:.4f} (gap {gap:+.3f})")
 
 	predictions = [entry["top5"] for entry in oof]
@@ -229,6 +235,9 @@ def main(config: ExperimentConfig) -> None:
 				epochs=config.epochs,
 				device=device,
 				batch_norm_mode=config.batch_norm_mode,
+				scheduler_type=config.scheduler,
+				warmup_epochs=config.warmup_epochs,
+				restore_best_epoch=config.restore_best_epoch,
 				on_epoch_end=lambda epoch, metrics: mlflow.log_metrics(metrics, step=epoch),
 			)
 

@@ -68,8 +68,16 @@ class ExperimentConfig:
 	weight_decay: float = 2e-3
 	label_smoothing: float = 0.2
 
-	# Training loop
+	# Training loop. `epochs` is a fixed budget and, under the cosine scheduler,
+	# the schedule horizon - there is no early exit.
 	epochs: int = 16
+	# Restore the best-val-loss epoch's weights before scoring; False scores
+	# the final epoch (the historical behaviour).
+	restore_best_epoch: bool = False
+	# "none" (constant LR) or "cosine": per-step cosine decay to 0 over the
+	# full budget after `warmup_epochs` of linear warmup.
+	scheduler: str = "none"
+	warmup_epochs: float = 2.0
 
 	# Tracking. The leaky-split runs live in "pokemon-classification"; the two
 	# experiments use the same metric names for different things - never mix.

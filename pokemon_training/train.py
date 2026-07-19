@@ -1,3 +1,6 @@
+import copy
+import math
+
 import torch
 
 
@@ -15,6 +18,25 @@ def _resolve_device(device):
 	return torch.device("cpu")
 
 
+def build_scheduler(optimizer, scheduler_type, warmup_epochs, epochs, steps_per_epoch):
+	"""Per-step LR scheduler over the full fixed budget, or None for constant LR."""
+	if scheduler_type == "none":
+		return None
+	if scheduler_type != "cosine":
+		raise ValueError(f"unknown scheduler: {scheduler_type!r}; valid: 'none', 'cosine'")
+
+	total_steps = epochs * steps_per_epoch
+	warmup_steps = warmup_epochs * steps_per_epoch
+
+	def factor(step):
+		if step < warmup_steps:
+			return (step + 1) / warmup_steps
+		progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+		return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+	return torch.optim.lr_scheduler.LambdaLR(optimizer, factor)
+
+
 def training_single_epoch(
 	model,
 	train_loader,
@@ -22,6 +44,7 @@ def training_single_epoch(
 	criterion,
 	device=None,
 	batch_norm_mode="train",
+	scheduler=None,
 ):
 	device = _resolve_device(device)
 	if batch_norm_mode not in {"train", "eval"}:
@@ -44,6 +67,8 @@ def training_single_epoch(
 		loss = criterion(outputs, labels)
 		loss.backward()
 		optimizer.step()
+		if scheduler is not None:
+			scheduler.step()
 
 		batch_size = inputs.size(0)
 		total_loss += loss.item() * batch_size
@@ -82,10 +107,18 @@ def train_outer_loop(
 	device=None,
 	batch_norm_mode="train",
 	on_epoch_end=None,
+	scheduler_type="none",
+	warmup_epochs=2.0,
+	restore_best_epoch=False,
 ):
 	device = _resolve_device(device)
 	model.to(device)
+	scheduler = build_scheduler(optimizer, scheduler_type, warmup_epochs, epochs, len(train_loader))
 	history = {"train_loss": [], "val_loss": []}
+
+	best_val_loss = math.inf
+	best_state = None
+	best_epoch = None
 
 	for epoch in range(epochs):
 		train_loss = training_single_epoch(
@@ -95,6 +128,7 @@ def train_outer_loop(
 			criterion,
 			device=device,
 			batch_norm_mode=batch_norm_mode,
+			scheduler=scheduler,
 		)
 		val_loss = _validation_loss(model, val_loader, criterion, device)
 		print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
@@ -102,7 +136,19 @@ def train_outer_loop(
 		history["train_loss"].append(train_loss)
 		history["val_loss"].append(val_loss)
 
+		if restore_best_epoch and val_loss < best_val_loss:
+			best_val_loss = val_loss
+			best_epoch = epoch
+			# deepcopy consumes no RNG, so tracking the best state cannot
+			# perturb an otherwise-identical run.
+			best_state = copy.deepcopy(model.state_dict())
+
 		if on_epoch_end is not None:
 			on_epoch_end(epoch, {"train_loss": train_loss, "val_loss": val_loss})
+
+	if restore_best_epoch and best_state is not None:
+		model.load_state_dict(best_state)
+		history["best_epoch"] = best_epoch
+		print(f"restored epoch {best_epoch + 1} (val_loss {best_val_loss:.4f})")
 
 	return history
