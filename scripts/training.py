@@ -114,7 +114,10 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 
 		predictions, labels = predict_top_k(model, val_loader, k=5, device=device)
 		fold_accuracy = top_k_accuracy_from_predictions(predictions, labels, k=1)
-		gap = history["val_loss"][-1] - history["train_loss"][-1]
+		# Measure the gap at the epoch actually scored - the restored one when
+		# restoration is on. Runs logged before this fix used the final epoch.
+		scored_epoch = history.get("best_epoch", len(history["val_loss"]) - 1)
+		gap = history["val_loss"][scored_epoch] - history["train_loss"][scored_epoch]
 
 		fold_accuracies.append(fold_accuracy)
 		fold_gaps.append(gap)

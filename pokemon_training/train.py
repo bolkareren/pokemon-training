@@ -26,7 +26,8 @@ def build_scheduler(optimizer, scheduler_type, warmup_epochs, epochs, steps_per_
 		raise ValueError(f"unknown scheduler: {scheduler_type!r}; valid: 'none', 'cosine'")
 
 	total_steps = epochs * steps_per_epoch
-	warmup_steps = warmup_epochs * steps_per_epoch
+	# int so a fractional warmup can't push the ramp's last factor above 1.0.
+	warmup_steps = int(round(warmup_epochs * steps_per_epoch))
 
 	def factor(step):
 		if step < warmup_steps:

@@ -88,7 +88,8 @@ EVOLUTION_FAMILIES = [
 
 def normalized_silhouette(path, size=NORMALIZED_SIZE):
 	"""Bbox-crop the creature, then resize to a fixed square: shape without scale."""
-	mask = np.array(Image.open(path).convert("L")) <= 127  # creature is dark on white
+	with Image.open(path) as image:
+		mask = np.array(image.convert("L")) <= 127  # creature is dark on white
 	rows, cols = np.where(mask)
 	if len(rows) == 0:
 		return np.zeros((size, size), dtype=bool)

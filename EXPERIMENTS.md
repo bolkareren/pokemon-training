@@ -192,6 +192,10 @@ Second seed: p2-blr4e-4-seed43 +2.4pt, **p2-blr4e4-32-seed43 0.707, +4.1pt**
 takes ~40 min. Untested residue for Phase 5: warmup length, higher LRs (8e-4),
 longer horizons (64).
 
+Metric note: `fold_gap` for runs up to and including `p3-nomaxpool` was
+measured at the *final* epoch; later runs measure it at the epoch actually
+scored (the restored one). Accuracy metrics are unaffected.
+
 ## Phase 3 — Reduced-stride stem
 
 The architecture-side fix for the same mechanism Phase 1 worked around: the

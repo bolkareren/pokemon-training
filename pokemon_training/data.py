@@ -253,10 +253,12 @@ def near_duplicate_groups(dataset, indices, iou_threshold=0.97):
 	"""Cluster near-identical silhouettes within a class (single-linkage IoU).
 	Cross-class pairs are never grouped: a shared shape there is task difficulty,
 	not redundancy."""
+	def load_binary_mask(path):
+		with Image.open(path) as image:
+			return np.array(image.convert("L")) > 127
+
 	targets = np.array(dataset.targets)
-	silhouettes = {
-		i: np.array(Image.open(dataset.samples[i][0]).convert("L")) > 127 for i in indices
-	}
+	silhouettes = {i: load_binary_mask(dataset.samples[i][0]) for i in indices}
 
 	groups = np.empty(len(indices), dtype=int)
 	next_group = 0
