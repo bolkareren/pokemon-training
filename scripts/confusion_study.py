@@ -19,8 +19,10 @@ rendering artifact rather than a shape difference.
 """
 
 import argparse
+import hashlib
 import json
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import mlflow
 import numpy as np
@@ -31,6 +33,10 @@ from pokemon_training.data import PROJECT_ROOT, load_dataset
 TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
 EXPERIMENT = "pokemon-classification-clean"
 NORMALIZED_SIZE = 64
+# The pairwise similarity matrix depends only on the image set, not the run,
+# and costs minutes to recompute. Persisted here (gitignored) and keyed by a
+# digest of the image paths, so a changed dataset invalidates it automatically.
+SIMILARITY_CACHE = PROJECT_ROOT / ".similarity-cache.npz"
 
 # Gen 1 evolution lines with two or more members among the 151 classes; every
 # class not listed is its own family. Slugs match the data/ directory names.
@@ -153,6 +159,29 @@ def class_similarity(dataset, classes):
     return similarity
 
 
+def cached_class_similarity(dataset, classes):
+    """class_similarity with an npz cache keyed by the exact image set.
+
+    The digest covers paths and mtimes plus the descriptor resolution, so a
+    regenerated or filtered dataset recomputes rather than serving stale pairs.
+    """
+    fingerprint = "\n".join(
+        f"{path}:{Path(path).stat().st_mtime_ns}" for path, _ in dataset.samples
+    )
+    digest = hashlib.sha1(f"{NORMALIZED_SIZE}\n{fingerprint}".encode()).hexdigest()
+
+    if SIMILARITY_CACHE.exists():
+        stored = np.load(SIMILARITY_CACHE, allow_pickle=False)
+        if str(stored["digest"]) == digest:
+            print(f"similarity matrix loaded from {SIMILARITY_CACHE.name}")
+            return stored["similarity"]
+
+    print("computing pairwise shape similarity (bbox-cropped, scale-normalised)...")
+    similarity = class_similarity(dataset, classes)
+    np.savez(SIMILARITY_CACHE, similarity=similarity, digest=digest)
+    return similarity
+
+
 def family_by_class(classes):
     """Map class index -> family id, failing loudly on any slug mismatch.
 
@@ -216,8 +245,7 @@ def main():
     dataset.samples = [s for i, s in enumerate(dataset.samples) if i in scored]
 
     print(f"run: {args.run_name}   images: {len(predictions)}   classes: {len(classes)}")
-    print("computing pairwise shape similarity (bbox-cropped, scale-normalised)...")
-    similarity = class_similarity(dataset, classes)
+    similarity = cached_class_similarity(dataset, classes)
 
     upper = similarity[np.triu_indices(len(classes), k=1)]
     print(f"\ncross-class similarity over {len(upper):,} pairs:")

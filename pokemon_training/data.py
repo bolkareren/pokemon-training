@@ -216,8 +216,46 @@ def get_transforms(
     return train_transform, test_transform
 
 
+# Decoded-image cache shared by every ImageFolder instance. The dataset is
+# ~1300 small PNGs (~200MB decoded) re-opened every epoch by every loader;
+# caching the decode is a pure speedup - pixels are identical, no RNG is
+# consumed, so training remains byte-identical to the uncached pipeline.
+_IMAGE_CACHE = {}
+
+
+def _cached_loader(path):
+    image = _IMAGE_CACHE.get(path)
+    if image is None:
+        with open(path, "rb") as handle:
+            image = Image.open(handle).convert("RGB")
+        _IMAGE_CACHE[path] = image
+    return image
+
+
+class EvalTransformCache(torch.utils.data.Dataset):
+    """Cache (tensor, target) pairs of a dataset whose transform is deterministic.
+
+    The eval transform is applied to every val image every epoch (val loss is
+    computed per epoch), and with derived input channels that work is no longer
+    trivial. Only ever wrap eval datasets - caching a train dataset would freeze
+    its augmentation sampling.
+    """
+
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self._cache = {}
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        if index not in self._cache:
+            self._cache[index] = self.dataset[index]
+        return self._cache[index]
+
+
 def load_dataset(data_dir="data", transform=None):
-    return datasets.ImageFolder(data_dir, transform=transform)
+    return datasets.ImageFolder(data_dir, transform=transform, loader=_cached_loader)
 
 
 def _normal_sprite_indices(dataset):
@@ -368,8 +406,12 @@ def create_datasets(
     )
 
     train_dataset = Subset(load_dataset(data_dir, transform=train_transform), train_idx)
-    val_dataset = Subset(load_dataset(data_dir, transform=test_transform), val_idx)
-    test_dataset = Subset(load_dataset(data_dir, transform=test_transform), test_idx)
+    val_dataset = EvalTransformCache(
+        Subset(load_dataset(data_dir, transform=test_transform), val_idx)
+    )
+    test_dataset = EvalTransformCache(
+        Subset(load_dataset(data_dir, transform=test_transform), test_idx)
+    )
 
     return train_dataset, val_dataset, test_dataset, base_dataset.classes
 
@@ -408,7 +450,7 @@ def create_fold_data_loaders(
     )
 
     test_loader = DataLoader(
-        Subset(load_dataset(data_dir, transform=test_transform), test_idx),
+        EvalTransformCache(Subset(load_dataset(data_dir, transform=test_transform), test_idx)),
         batch_size=batch_size,
         shuffle=False,
     )
@@ -425,7 +467,9 @@ def create_fold_data_loaders(
             generator=shuffle_generator,
         )
         val_loader = DataLoader(
-            Subset(load_dataset(data_dir, transform=test_transform), val_idx),
+            EvalTransformCache(
+                Subset(load_dataset(data_dir, transform=test_transform), val_idx)
+            ),
             batch_size=batch_size,
             shuffle=False,
         )
