@@ -1,21 +1,10 @@
-"""Does silhouette similarity explain the model's confusions?
+"""Compare a run's out-of-fold confusions against silhouette shape similarity
+and the Gen 1 evolution-line structure.
 
-The model's top-5 accuracy (~0.84) sits ~18 points above its top-1 (~0.65): it
-usually shortlists the right class and then picks wrong. This asks whether that
-is the model's fault or the task's - i.e. how much of the error is between
-Pokemon whose silhouettes are genuinely near-identical (Voltorb/Electrode) and
-therefore irreducible from shape alone.
+    uv run python scripts/confusion_study.py [--run-name <mlflow run name>]
 
-    uv run python scripts/confusion_study.py [--run-name c2-resnet50-standard]
-
-Reads a run's `oof_predictions.json` (every image scored by a model that never
-trained on it) and compares the confusions against a shape-similarity matrix
-computed directly from the silhouettes.
-
-Similarity is computed on **bbox-cropped, scale-normalised** masks. Raw IoU
-would be dominated by the sprite-scale differences between generations (a
-Pokemon fills ~45% of the frame in Gen 1 and ~13% in Gen 6), which is a
-rendering artifact rather than a shape difference.
+Similarity is max IoU on bbox-cropped, scale-normalised masks - raw IoU would
+be dominated by the generation sprite-scale artifact.
 """
 
 import argparse
@@ -33,17 +22,12 @@ from pokemon_training.data import PROJECT_ROOT, load_dataset
 TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
 EXPERIMENT = "pokemon-classification-clean"
 NORMALIZED_SIZE = 64
-# The pairwise similarity matrix depends only on the image set, not the run,
-# and costs minutes to recompute. Persisted here (gitignored) and keyed by a
-# digest of the image paths, so a changed dataset invalidates it automatically.
+# Run-independent, so persisted (gitignored) and keyed by an image-set digest.
 SIMILARITY_CACHE = PROJECT_ROOT / ".similarity-cache.npz"
 
-# Gen 1 evolution lines with two or more members among the 151 classes; every
-# class not listed is its own family. Slugs match the data/ directory names.
-# Cross-generation relatives outside Gen 1 (e.g. Onix->Steelix) do not count,
-# and Hitmonlee/Hitmonchan are unrelated within Gen 1 (Tyrogue is Gen 2).
-# Eevee's three branches share one family: same rationale as a linear line -
-# shared body plan, differing detail.
+# Gen 1 evolution lines with 2+ members among the 151 classes (slugs match
+# data/ directory names); unlisted classes are singleton families.
+# Cross-generation relatives (Onix->Steelix, Tyrogue) do not count.
 EVOLUTION_FAMILIES = [
 	("bulbasaur", "ivysaur", "venusaur"),
 	("charmander", "charmeleon", "charizard"),
@@ -137,12 +121,8 @@ def load_oof(run_name):
 
 
 def class_similarity(dataset, classes):
-	"""Max IoU between any two images of two different classes, per class pair.
-
-	Max rather than mean: the question is whether *some* rendering of A is
-	near-identical to *some* rendering of B, which is what makes a pair
-	confusable, not whether they match on average.
-	"""
+	"""Max IoU between any two images of two classes - max because one
+	confusable pair of renderings is what makes classes confusable."""
 	by_class = defaultdict(list)
 	for path, target in dataset.samples:
 		by_class[target].append(path)
@@ -160,11 +140,8 @@ def class_similarity(dataset, classes):
 
 
 def cached_class_similarity(dataset, classes):
-	"""class_similarity with an npz cache keyed by the exact image set.
-
-	The digest covers paths and mtimes plus the descriptor resolution, so a
-	regenerated or filtered dataset recomputes rather than serving stale pairs.
-	"""
+	"""class_similarity with an npz cache; the paths+mtimes digest invalidates
+	it whenever the image set changes."""
 	fingerprint = "\n".join(
 		f"{path}:{Path(path).stat().st_mtime_ns}" for path, _ in dataset.samples
 	)
@@ -183,11 +160,8 @@ def cached_class_similarity(dataset, classes):
 
 
 def family_by_class(classes):
-	"""Map class index -> family id, failing loudly on any slug mismatch.
-
-	Unlisted classes each get their own singleton family, so a within-family
-	confusion is only ever counted between listed evolution-line members.
-	"""
+	"""Map class index -> family id (singletons for unlisted classes), failing
+	loudly on any slug mismatch."""
 	listed = [slug for family in EVOLUTION_FAMILIES for slug in family]
 	duplicated = {slug for slug in listed if listed.count(slug) > 1}
 	if duplicated:
@@ -206,12 +180,8 @@ def family_by_class(classes):
 
 
 def report_evolution_line_confusions(errors, classes, top_pairs):
-	"""The Phase N1 mechanism metric: how much error is within an evolution line?
-
-	Reported next to its chance rate - the probability that a uniformly random
-	*wrong* prediction lands in the true class's family - so runs of different
-	accuracy stay comparable on this axis.
-	"""
+	"""Share of top-1 errors landing inside the true class's evolution family,
+	next to its chance rate so runs of different accuracy stay comparable."""
 	family = family_by_class(classes)
 	within = [e for e in errors if family[e["label"]] == family[e["top5"][0]]]
 

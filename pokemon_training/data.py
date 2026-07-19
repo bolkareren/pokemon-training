@@ -15,13 +15,8 @@ SHINY_MANIFEST_PATH = PROJECT_ROOT / "shiny_index.json"
 
 
 class RandomResolutionJitter:
-	"""Downsample to a random sprite-era resolution, then back up to 224.
-
-	Raw sprites range 56x56 (Gen 1) to 128x128 (Gen 6+) and are all upsampled to
-	224x224, so edge thickness and blockiness vary systematically by generation -
-	a shortcut the model can key on instead of shape. Randomizing the effective
-	source resolution removes it.
-	"""
+	"""Downsample to a random sprite-era resolution and back up, so effective
+	source resolution stops being a generation shortcut."""
 
 	SPRITE_SIZES = (56, 64, 80, 96, 120, 128)
 
@@ -38,12 +33,7 @@ class RandomResolutionJitter:
 
 
 class RandomMorphology:
-	"""Randomly dilate or erode the silhouette by 1-2 pixels.
-
-	Operates on the thresholded binary mask, so it perturbs the contour itself
-	rather than greyscale edges. Dilation is a max filter; erosion is the same
-	filter on the inverted mask.
-	"""
+	"""Randomly dilate or erode the binary mask by 1-2px, perturbing the contour."""
 
 	def __init__(self, p=0.5):
 		self.p = p
@@ -65,39 +55,20 @@ class RandomMorphology:
 
 
 class SilhouetteChannels:
-	"""Encode the binary mask into per-channel silhouette descriptors.
+	"""Encode the binary mask into per-channel descriptors ("mask", "sdt",
+	"curv", "edge") - the input representation, applied at train and eval alike.
 
-	The default input replicates the mask across all three channels, so two
-	thirds of input capacity carries nothing. Each channel is independently one
-	of:
-
-	- "mask": the thresholded silhouette itself. Emitted with background = 1
-		by default - the original convention every pre-N2 result used, measured
-		~3pt better than creature = 1 (see EXPERIMENTS.md N2) - or creature = 1
-		when invert_mask is set.
-	- "sdt": signed distance transform - per-pixel distance to the boundary,
-		positive inside, at a fixed global scale of SDT_SCALE pixels mapped into
-		[0, 1] (0.5 on the boundary). Fixed rather than per-image so absolute
-		thickness survives; encodes limb/neck thickness and the medial axis.
-	- "curv": morphological curvature proxy - opening top-hat (thin protrusions
-		the opening removes) minus closing bottom-hat (thin concavities the
-		closing fills), around a 0.5 background. Values {0, 0.5, 1}: bright where
-		the contour juts out (crests, tails, spikes), dark where it cuts in.
-
-	This is the input representation, not augmentation: it applies identically
-	at train and eval time, and runs after RandomMorphology so derived channels
-	describe the mask the network actually sees.
+	Derived channels always treat the creature as inside; `invert_mask` only
+	sets the polarity of emitted "mask" channels. See EXPERIMENTS.md.
 	"""
 
-	VALID = ("mask", "sdt", "curv")
-	# Distance scale in pixels. Inside distances on a 224px canvas peak around
-	# 60-70px for the fattest Gen 1 blobs, so 64 spends the [0, 1] range on the
-	# occupied part of it without clipping much.
+	VALID = ("mask", "sdt", "curv", "edge")
+	# 64px spends the [0, 1] range on the occupied distance range without clipping.
 	SDT_SCALE = 64.0
-	# Structuring element for the curvature proxy: captures features up to
-	# ~3px radius, one notch above RandomMorphology's 1-2px perturbations so
-	# that augmentation doesn't erase the signal this channel encodes.
+	# 7px: above RandomMorphology's 1-2px so augmentation can't erase the signal.
 	CURV_KERNEL = 7
+	# 8px: the boundary band is still ~2px wide after the stem's 4x downsample.
+	EDGE_SIGMA = 8.0
 
 	def __init__(self, channels=("mask", "mask", "mask"), invert_mask=False):
 		unknown = set(channels) - set(self.VALID)
@@ -107,28 +78,33 @@ class SilhouetteChannels:
 		self.invert_mask = invert_mask
 
 	def _sdt(self, mask):
+		"""Signed distance to the boundary, fixed global scale, 0.5 on the contour."""
 		inside = mask.numpy() > 0.5
 		signed = ndimage.distance_transform_edt(inside) - ndimage.distance_transform_edt(~inside)
 		scaled = 0.5 + signed / (2.0 * self.SDT_SCALE)
 		return torch.from_numpy(scaled).clamp(0.0, 1.0).float()
 
 	def _curv(self, mask):
-		# scipy's separable min/max filters, not F.max_pool2d: a dense 7x7 max
-		# pool costs ~30ms/image on CPU, which would triple epoch time in the
-		# zero-worker DataLoader. This is ~1ms for the same morphology.
+		"""Morphological curvature proxy: protrusions bright, concavities dark."""
+		# scipy's separable filters: ~30x faster than a dense max_pool2d here.
 		inside = mask.numpy() > 0.5
 		kernel = self.CURV_KERNEL
 		opening = ndimage.maximum_filter(ndimage.minimum_filter(inside, kernel), kernel)
 		closing = ndimage.minimum_filter(ndimage.maximum_filter(inside, kernel), kernel)
 
 		out = np.full(inside.shape, 0.5, dtype=np.float32)
-		out[inside & ~opening] = 1.0  # opening top-hat: thin protrusions
-		out[closing & ~inside] = 0.0  # closing bottom-hat: thin concavities
+		out[inside & ~opening] = 1.0
+		out[closing & ~inside] = 0.0
 		return torch.from_numpy(out)
 
+	def _edge(self, mask):
+		"""Gaussian band on the contour, thick enough to survive stem downsampling."""
+		inside = mask.numpy() > 0.5
+		distance = ndimage.distance_transform_edt(inside) + ndimage.distance_transform_edt(~inside)
+		return torch.from_numpy(np.exp(-(distance**2) / (2.0 * self.EDGE_SIGMA**2))).float()
+
 	def __call__(self, x):
-		# The incoming tensor is creature = 1 (the internal representation the
-		# derived channels are defined on); polarity applies only on emission.
+		# Incoming tensor is creature = 1; polarity applies only on emission.
 		if all(channel == "mask" for channel in self.channels):
 			return x if self.invert_mask else 1.0 - x
 
@@ -153,14 +129,9 @@ def get_transforms(
 	input_channels=("mask", "mask", "mask"),
 	invert_mask=False,
 ):
-	"""Build (train, eval) transforms. Each augmentation is independently togglable.
-
-	Order matters. Resolution jitter, the affine, elastic and the flip all run on
-	the PIL image before tensor conversion; morphology runs after the binary
-	threshold, since it is defined on the mask. The threshold sits after the
-	geometric augmentations, so any interpolation they introduce is re-binarized
-	and the silhouette stays hard-edged.
-	"""
+	"""Build (train, eval) transforms. Geometric augmentations run on the PIL
+	image; the threshold re-binarizes their interpolation; mask ops and channel
+	encoding run on the binary mask."""
 	geometric = []
 	if resolution_jitter:
 		geometric.append(RandomResolutionJitter())
@@ -179,11 +150,8 @@ def get_transforms(
 		geometric.append(transforms.RandomHorizontalFlip(p=0.5))
 
 	mask_ops = [RandomMorphology()] if morphological else []
-	# Internal representation: creature = 1, background = 0 - what the derived
-	# channels are defined on. SilhouetteChannels flips emitted mask channels
-	# back to the original background = 1 polarity unless invert_mask is set;
-	# polarity is not a symmetry of conv+BN+ReLU on pretrained weights, and
-	# creature = 1 measured ~3pt worse across two seeds (EXPERIMENTS.md N2).
+	# Internal representation is creature = 1; SilhouetteChannels emits mask
+	# channels as background = 1 unless invert_mask is set.
 	threshold = transforms.Lambda(lambda x: (x < 0.5).float())
 	encode = SilhouetteChannels(input_channels, invert_mask=invert_mask)
 
@@ -216,10 +184,7 @@ def get_transforms(
 	return train_transform, test_transform
 
 
-# Decoded-image cache shared by every ImageFolder instance. The dataset is
-# ~1300 small PNGs (~200MB decoded) re-opened every epoch by every loader;
-# caching the decode is a pure speedup - pixels are identical, no RNG is
-# consumed, so training remains byte-identical to the uncached pipeline.
+# Shared decode cache: pure speedup, consumes no RNG, training stays byte-identical.
 _IMAGE_CACHE = {}
 
 
@@ -233,13 +198,8 @@ def _cached_loader(path):
 
 
 class EvalTransformCache(torch.utils.data.Dataset):
-	"""Cache (tensor, target) pairs of a dataset whose transform is deterministic.
-
-	The eval transform is applied to every val image every epoch (val loss is
-	computed per epoch), and with derived input channels that work is no longer
-	trivial. Only ever wrap eval datasets - caching a train dataset would freeze
-	its augmentation sampling.
-	"""
+	"""Cache (tensor, target) pairs of a deterministic-transform dataset.
+	Only ever wrap eval datasets - caching train would freeze augmentation."""
 
 	def __init__(self, dataset):
 		self.dataset = dataset
@@ -259,18 +219,11 @@ def load_dataset(data_dir="data", transform=None):
 
 
 def _normal_sprite_indices(dataset):
-	"""Indices of `dataset` whose image is a normal (non-shiny) sprite.
+	"""Indices of normal (non-shiny) sprites; shiny silhouettes are duplicates.
 
-	Each class's images run as a normal sprite series (one per generation)
-	followed by a shiny series repeating those same generations. Shiny sprites
-	are recolours, so their silhouettes duplicate the normal ones - keeping both
-	puts pixel-identical twins on either side of the train/val split, which made
-	~62% of validation a memorization test. See scripts/duplicate_audit.py.
-
-	The boundary index per class is precomputed into shiny_index.json, since it
-	is only derivable from raw sprite dimensions (see
-	scripts/generate_shiny_manifest.py) and varies by class: 8 for 52 Pokemon,
-	9 for the other 99.
+	The per-class boundary index lives in shiny_index.json (regenerate with
+	scripts/generate_shiny_manifest.py) - it varies by class and is only
+	derivable from raw sprite dimensions.
 	"""
 	if not SHINY_MANIFEST_PATH.exists():
 		raise FileNotFoundError(
@@ -283,10 +236,8 @@ def _normal_sprite_indices(dataset):
 
 	keep = []
 	for i, (path, target) in enumerate(dataset.samples):
-		# Match the canonical name exactly. data/ can contain strays from earlier
-		# processing runs under other conventions (e.g. silhouette-image-1.png,
-		# a byte-identical copy of image-1.png); a loose search would read those
-		# as a second copy of an index and readmit the duplicate we are removing.
+		# Exact canonical-name match: stray files from older conventions would
+		# otherwise readmit the duplicates being removed.
 		match = re.fullmatch(r"image-(\d+)\.png", Path(path).name)
 		if match is None:
 			continue
@@ -299,17 +250,9 @@ def _normal_sprite_indices(dataset):
 
 
 def near_duplicate_groups(dataset, indices, iou_threshold=0.97):
-	"""Group id per index, clustering near-identical silhouettes within a class.
-
-	Excluding shiny sprites removes all exact duplicates but leaves ~4.4%
-	near-duplicates: consecutive generations whose sprite art barely changed.
-	Grouping them keeps a cluster from straddling a fold boundary, which would
-	reintroduce a smaller version of the Phase 11 leak.
-
-	Single-linkage by IoU, computed only within a class - cross-class pairs are
-	never grouped, since two different Pokemon sharing a silhouette is a fact
-	about the task, not redundancy to be split around.
-	"""
+	"""Cluster near-identical silhouettes within a class (single-linkage IoU).
+	Cross-class pairs are never grouped: a shared shape there is task difficulty,
+	not redundancy."""
 	targets = np.array(dataset.targets)
 	silhouettes = {
 		i: np.array(Image.open(dataset.samples[i][0]).convert("L")) > 127 for i in indices
@@ -321,7 +264,7 @@ def near_duplicate_groups(dataset, indices, iou_threshold=0.97):
 	for label in np.unique(targets[indices]):
 		members = [(position, i) for position, i in enumerate(indices) if targets[i] == label]
 
-		representatives = []  # (group_id, silhouette) for each cluster so far
+		representatives = []  # (group_id, silhouette) per cluster
 		for position, i in members:
 			silhouette = silhouettes[i]
 			match = None
@@ -342,12 +285,8 @@ def near_duplicate_groups(dataset, indices, iou_threshold=0.97):
 
 
 def fold_indices(dataset, indices, folds, random_state=42, group_aware=True):
-	"""Yield (train_idx, val_idx) per fold, as indices addressing `dataset`.
-
-	Stratified by class and grouped by near-duplicate cluster. With
-	group_aware=False every image is its own group, which reduces this to plain
-	stratified K-fold.
-	"""
+	"""Yield (train_idx, val_idx) per fold, stratified by class and grouped so
+	near-duplicate clusters never straddle a fold."""
 	indices = np.asarray(indices)
 	targets = np.array(dataset.targets)[indices]
 	groups = near_duplicate_groups(dataset, indices) if group_aware else np.arange(len(indices))
@@ -358,11 +297,8 @@ def fold_indices(dataset, indices, folds, random_state=42, group_aware=True):
 
 
 def split_dataset_indices(dataset, val_size, test_size, random_state=42, indices=None):
-	"""Stratified train/val/test split, optionally over a subset of `dataset`.
-
-	`indices` restricts the split to a subset (e.g. normal sprites only); the
-	returned indices still address the full dataset.
-	"""
+	"""Stratified train/val/test split over `indices` (or the whole dataset);
+	returned indices address the full dataset."""
 	targets = np.array(dataset.targets)
 	indices = np.arange(len(dataset)) if indices is None else np.asarray(indices)
 	labels = targets[indices]
@@ -377,8 +313,7 @@ def split_dataset_indices(dataset, val_size, test_size, random_state=42, indices
 	train_idx, val_idx = train_test_split(
 		temp_idx,
 		test_size=val_size / (1 - test_size),
-		# temp_idx holds dataset-level ids, so index the full target array here,
-		# not the subset-aligned `labels`. Identical when indices is None.
+		# temp_idx holds dataset-level ids: index the full target array here.
 		stratify=targets[temp_idx],
 		random_state=random_state,
 	)
@@ -426,15 +361,9 @@ def create_fold_data_loaders(
 	group_aware=True,
 	augmentations=None,
 ):
-	"""Cross-validation loaders over everything except a held-out test split.
-
-	The test split is carved out *before* cross-validating, so it stays untouched
-	across every fold and remains available for a single final evaluation.
-
-	Returns (folds, test_loader, classes) where each fold is
-	(train_loader, val_loader, val_idx); val_idx addresses the base dataset so
-	out-of-fold predictions can be traced back to individual images.
-	"""
+	"""Cross-validation loaders; the test split is carved out first and stays
+	untouched. Each fold is (train_loader, val_loader, val_idx), val_idx
+	addressing the base dataset so out-of-fold predictions trace to images."""
 	train_transform, test_transform = get_transforms(**(augmentations or {}))
 	base_dataset = load_dataset(data_dir)
 	indices = (
@@ -478,8 +407,8 @@ def create_fold_data_loaders(
 
 def create_data_loaders(
 	data_dir,
-	# 0.15, not 0.1: a 10% split of the 1307 deduplicated images is 131, fewer
-	# than the 151 classes, which makes a stratified split impossible.
+	# >= 0.15: a smaller split has fewer images than the 151 classes and the
+	# stratified split raises.
 	val_size=0.15,
 	test_size=0.15,
 	batch_size=16,
@@ -496,8 +425,7 @@ def create_data_loaders(
 		augmentations=augmentations,
 	)
 
-	# Pin the shuffle to its own generator seeded with random_state so epoch
-	# ordering is reproducible and independent of global-RNG consumption order.
+	# Own generator so epoch ordering is independent of global-RNG consumption.
 	shuffle_generator = torch.Generator().manual_seed(random_state)
 	train_loader = DataLoader(
 		train_dataset,

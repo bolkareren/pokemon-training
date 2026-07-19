@@ -67,12 +67,8 @@ def build_model_and_optimizer(config, num_classes, weights_checkpoint):
 
 
 def run_cross_validation(config, data_dir, weights_checkpoint, device):
-	"""Train one model per fold; return pooled out-of-fold metrics and predictions.
-
-	Pooling the folds' out-of-fold predictions gives one score over every image
-	in the CV pool, rather than K separate small-sample scores. The per-fold
-	spread is reported alongside it as the honest uncertainty.
-	"""
+	"""Train one model per fold; return metrics pooled over out-of-fold
+	predictions, with the per-fold spread as the uncertainty."""
 	fold_loaders, test_loader, classes = create_fold_data_loaders(
 		data_dir=data_dir,
 		folds=config.folds,
@@ -178,12 +174,8 @@ def main(config: ExperimentConfig) -> None:
 	config_dict["data_dir"] = str(data_dir)
 	config_dict["weights_checkpoint"] = str(weights_checkpoint) if weights_checkpoint else None
 
-	# MLflow bakes an experiment's artifact_location in as an absolute path at
-	# creation time and never updates it - if the project directory is later
-	# moved/renamed, every run silently writes artifacts outside the project.
-	# Pin it to the current PROJECT_ROOT the first time an experiment is
-	# created, so a future move can't reintroduce that. Existing experiments
-	# are left alone; artifact_location is only settable at creation time.
+	# artifact_location is baked in as an absolute path at experiment creation
+	# and never updated; pin it so a moved project can't scatter artifacts.
 	if mlflow.get_experiment_by_name(config.experiment_name) is None:
 		mlflow.create_experiment(
 			config.experiment_name,
@@ -191,8 +183,6 @@ def main(config: ExperimentConfig) -> None:
 		)
 	mlflow.set_experiment(config.experiment_name)
 	with mlflow.start_run(run_name=config.run_name):
-		# Params: the full config (single source of truth) plus resolved facts
-		# that aren't tunable but matter for reproducibility.
 		mlflow.log_params(config_dict)
 		mlflow.log_params(
 			{
@@ -208,8 +198,8 @@ def main(config: ExperimentConfig) -> None:
 			metrics, oof, classes, _ = run_cross_validation(
 				config, data_dir, weights_checkpoint, device
 			)
-			# Out-of-fold predictions are the input to the Phase 15 data study:
-			# every image scored by a model that never trained on it.
+			# Every image scored by a model that never trained on it - the
+			# confusion study's input.
 			mlflow.log_dict({"classes": classes, "predictions": oof}, "oof_predictions.json")
 			history = None
 			model = None

@@ -1,1101 +1,189 @@
-# Experiment log — clean data
+# Experiment log
 
-Every experiment here runs on the **deduplicated** dataset and is scored by
-**grouped K-fold cross-validation**. This file supersedes
-[LEAKY-EXPERIMENTS.md](LEAKY-EXPERIMENTS.md), whose ~50 runs were all measured on
-a split that put a pixel-identical twin in train for ~62% of validation. None of
-its numbers are comparable to anything here, and several of its conclusions are
-known to be backwards — see "What this file got wrong" there before reusing any
-of them.
+Everything here runs on the deduplicated dataset (1307 images, 151 classes,
+shiny recolours excluded) and is scored by 5-fold grouped CV after a 15% test
+split is carved out: **`oof_accuracy` pooled over 1110 out-of-fold predictions,
+compared on `fold_accuracy_sem`**. Full per-phase logs live in git history;
+the pre-dedup era is summarized in [LEAKY-EXPERIMENTS.md](LEAKY-EXPERIMENTS.md)
+and none of its numbers are comparable to anything here.
 
-It began as a **replication from scratch** of the old file's phases, because
-their answers were all selected under an incentive that rewarded memorization;
-old results appear beside each item as *prior (invalid)* — a hypothesis to test,
-never a baseline to beat. The replication is now largely done, and the plan has
-moved on to the representation work in **[Active plan](#active-plan)**. Start
-with **[Results so far](#results-so-far)** for the summary.
+## Protocol
 
-## What changed
+- Every run: `uv run python scripts/training.py --run-name <name> --folds 5 ...`
+  Runs are findable by name in MLflow (`make ui`, experiment
+  `pokemon-classification-clean`); filter on `status == "FINISHED"`.
+- **`--folds 5` is required.** The default (`folds=0`) runs a single split,
+  reports `validation_accuracy` instead of `oof_accuracy`, and still succeeds —
+  a missing flag produces a plausible, incomparable number.
+- **Significance bar: 2× combined SEM** (binomial floor at n=1110 is ±1.5pt;
+  `fold_accuracy_sem` is the number to use). Confirm anything load-bearing with
+  a second `random_state` — measured reference variance on a seed change alone
+  is ~±1pt.
+- A no-flag `--folds 5` run reproduces the baseline exactly. Changing
+  `--model-name` with a checkpoint set requires `--weights-checkpoint None`
+  (fails fast otherwise). `val_size` is unused in fold mode.
+- Every fold run logs `oof_predictions.json`; `scripts/confusion_study.py`
+  turns it into confusion, shape-similarity, and evolution-line metrics.
+- **No metadata shortcuts**: preprocessing may only use information present in
+  the image itself. Sprite index, generation, and source resolution are dataset
+  properties, not properties of an arbitrary input silhouette.
+- **No ensembling during exploration** — single model per experiment; ensembles
+  belong to the final phase only (see Phase 6, including the OOF-ensemble
+  leakage trap).
 
-| | leaky | clean |
+## Results so far
+
+| question | answer | runs |
 |---|---|---|
-| images | 2162 | **1307** |
-| exact duplicates | 706 (32.7%) | **0** |
-| near duplicates (IoU > 0.97) | 845 (39.1%) | 56 (4.3%), never split across folds |
-| val twin in train | ~62% | **0%** |
-| split | single 80/10/10 | test held out, then 5-fold grouped CV |
-| val n per estimate | 217 | **1110** (pooled out-of-fold) |
-| reported metric | `validation_accuracy` | `oof_accuracy`, with `fold_accuracy_sem` |
+| is the historical 0.906 real? | no — ~62% of val had a pixel-identical shiny twin in train; honest score 0.617 | c0-leaky-reference |
+| honest baseline | **0.653** (resnet50, ImageNet weights, lastN=3 — the config defaults) | c2-resnet50-standard |
+| shape-biased checkpoint? | actively harmful: −5.7pt vs ImageNet at 4.0× SEM — the one large confirmed effect | c0-5fold vs c2-resnet50-standard |
+| how deep to fine-tune? | plateau across lastN 2/3/4; lastN 5 and 7 are not distinct configs; deep unfreezing unstable without warmup | c1-lastN* |
+| backbone size? | not the axis (50 > 18 > 34); weight origin was the confound | c2-* |
+| label smoothing hurting? | no — removing it costs 3.5pt; 0.05–0.2 flat; the train/val gap responds to it but accuracy doesn't → **gap is not predictive** | c3-ls* |
+| does added augmentation help? | no; elastic is significantly harmful (−4.9pt, 2.1× SEM) on contour-only input | c7-* |
+| does removing augmentation help? | no; nothing clears the bar, scale jitter removal moves nothing → size cue not load-bearing; augmentation closed in both directions | n1-* |
+| is the error irreducible? | no — silhouette collisions explain ~3% of errors (electrode/voltorb IoU 0.969 is the max); evolution-line confusions are 12.7% of errors at 15× chance | confusion study |
+| mask polarity? | worth ~3pt despite being information-free; background = 1 wins (confirmed, 2 paired seeds, ~2.3× SEM) | n2-mask-inverted* |
+| SDT input channel? | positive in all 4 paired comparisons (+1.9pt pooled, ~2.0× SEM) but 0.9× vs the real default; **verdict pending seeds 44/45** (in flight) | n2-*sdt* |
+| curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 
-Two code changes back this:
+**Current best: 0.653 (the defaults), SEM 0.013.** Best unconfirmed candidate:
+`--input-channels mask sdt mask` at 0.674/0.666 over two seeds.
 
-- `exclude_shiny=True` drops the shiny sprite series, which was the entire
-  source of the duplication (shiny is a recolour, so its silhouette is identical
-  to the normal sprite's). The boundary index per class lives in
-  `shiny_index.json`, generated by
-  [scripts/generate_shiny_manifest.py](scripts/generate_shiny_manifest.py).
-- `--folds K` cross-validates with `StratifiedGroupKFold`, grouping
-  near-duplicate silhouettes so a cluster cannot straddle a fold. The test split
-  is carved out *before* cross-validating and stays untouched until Phase D6.
+What the failures collectively point at: the bottleneck is not capacity,
+regularization, data variety, or task ambiguity — it is how much discriminating
+information reaches (and survives) the network. That is what the roadmap
+attacks: input representation first, then the stem that downsamples it away.
 
-`val_size`/`test_size` moved 0.1 → 0.15: at 1307 images a 10% split is 131,
-fewer than the 151 classes, which makes a stratified split impossible.
+Also measured, and load-bearing:
 
-## How to read this
-
-- Each item is a command with a `--run-name` matching the checkbox, findable in
-  the MLflow UI (`make ui` → http://localhost:5001), experiment
-  **`pokemon-classification-clean`** — which is now the `ExperimentConfig`
-  default. The leaky runs stay in `pokemon-classification`; the two use the same
-  metric names for different things, so they are deliberately not mixed.
-- Report `oof_accuracy` (pooled over all 1110 out-of-fold predictions) and
-  `fold_accuracy_sem`. Compare configs on **SEM, not single folds**.
-- Anything not passed as a flag keeps the `ExperimentConfig` default.
-- Every run writes `oof_predictions.json` — every image scored by a model that
-  never trained on it. That artifact is the input to the Phase C9 data study, so
-  the study comes free with the sweeps.
-
-### Flags that are easy to get wrong
-
-- **`--folds 5` is required on every run.** `folds` defaults to `0`, which runs a
-  single split and reports `validation_accuracy` instead of `oof_accuracy`. A run
-  missing this flag is not comparable to the baseline and is easy to miss,
-  because it still succeeds.
-- **`exclude_shiny` defaults to `True`** — no flag needed for clean runs. Pass
-  `--no-exclude-shiny` only to deliberately reproduce a leaky number.
-- **Changing `--model-name` requires `--weights-checkpoint None`** if a
-  checkpoint is set. Loading a resnet50 checkpoint into a resnet18 raises a
-  state-dict `RuntimeError` rather than silently mis-loading, so a forgotten flag
-  fails fast and loudly.
-- **The current defaults are `c2-resnet50-standard`** (resnet50, ImageNet
-  weights, `lastN=3`, `blr=2e-4`, `clr=1e-3`, `wd=2e-3`, `ls=0.2`, `epochs=16`),
-  so a no-flag `--folds 5` run reproduces the 0.653 baseline exactly.
-- `val_size` is unused in fold mode; only `test_size` applies, carving out the
-  held-out split before the folds.
-
-### Noise floor
-
-The single biggest methodological failure of the previous file was quoting a
-noise floor 3× too small, which turned ~40 runs of noise into a narrative. Do
-not repeat it:
-
-- Binomial SE at n=1110, p≈0.6 is **±1.5pt**. That is the *floor*, assuming
-  independent samples.
-- `fold_accuracy_sem` is the number to actually use, since folds are not fully
-  independent.
-- Treat a difference as real only at roughly **2× SEM**, and confirm anything
-  load-bearing with a second `random_state`.
+- **Models are high-variance**: five ~equal configs agree on only 75-82% of
+  predictions; 230 of 1110 images are solved by no config, 880 by at least one.
+  Real ensemble headroom — deliberately deferred to Phase 6.
+- **Sprite scale mixes artifact with signal** (generation canvas vs real size,
+  same ~2× magnitude, so they cancel). Normalising it away via generation
+  metadata was built and removed as a shortcut; size is near-useless as a cue
+  in this framing, which N1 then confirmed from the augmentation side.
 
 ---
 
-## Phase C0 — Baseline (done)
+# Roadmap
+
+Phases run in order. Every phase: single model, 5-fold grouped CV, 2× SEM bar,
+second seed on anything that would change a default.
+
+## Phase 1 — Third channel: edge filtering
+
+The curv failure showed *sparse* boundary encodings die in the stem; `"edge"`
+(implemented) is the dense retry: a Gaussian band `exp(−d²/2σ²)`, σ = 8px, on
+the contour — wide enough that ~2px survive the 4× stem downsample. It
+concentrates input contrast where all silhouette information lives, in the form
+pretrained edge-sensitive stem filters respond to.
+
+Gated on the seeds-44/45 SDT verdict (runs in flight):
+
+- If SDT confirms → base is `(mask, sdt, mask)`:
+  - [ ] **p1-sdt-edge** — `--input-channels mask sdt edge`. Note: edge is
+        pointwise in the SDT, so this measures representational convenience,
+        not new information — the polarity result proved that can be worth
+        points anyway.
+- Either way:
+  - [ ] **p1-edge** — `--input-channels mask edge mask` on the default base;
+        the clean single-factor test of the downsampling-workaround hypothesis.
+- [ ] **p1-verdict** — if edge helps anywhere, that is direct evidence for
+      Phase 3; record the cross-reference explicitly.
+
+Backup third-channel candidate if edge fails: level-set curvature of the EDT
+field (`div(∇φ/|∇φ|)` via two `numpy.gradient` calls — dense, smooth, no new
+dependencies).
+
+## Phase 2 — Schedule and checkpointing
+
+There is currently **no LR scheduler** (constant LR, 16 epochs) and the
+*final*-epoch model is what gets scored. Strongest prior evidence of anything
+untested: the leaky-era `blr=4e-4` collapse and the `c1-lastN4` fold divergence
+share the no-warmup signature. Also de-confounds Phase 3+, which unfreezes
+more of the network.
+
+- [ ] **p2-best-epoch** — restore the best-val-loss epoch before scoring.
+      Free accuracy; removes `epochs` as a tuning axis.
+- [ ] **p2-cosine-warmup** — cosine decay + short linear warmup.
+- [ ] **p2-epochs32** — with best-epoch restoration in place, longer training
+      can only help; find where it saturates.
+
+## Phase 3 — Reduced-stride stem
+
+The architecture-side fix for the same mechanism Phase 1 works around: the
+ImageNet stem (stride-2 conv + stride-2 maxpool) discards thin contour detail
+before the first residual block. Keep ResNet50 + ImageNet weights; surgery only
+where our input provably differs from natural images.
+
+- [ ] **p3-nomaxpool** — drop the stem maxpool (cheapest; 2× feature maps).
+- [ ] **p3-stride1-conv** — also conv1 stride 1 if compute allows (4× maps).
+- [ ] Interpret jointly with Phase 1: edge-channel gain and stem gain should
+      be partially redundant if the thin-feature diagnosis is right.
+
+## Phase 4 — Sketch-pretrained backbones (+ edge)
+
+Checkpoint-swap protocol, exactly like the C2 comparison. Expectations
+deliberately low: the shape-biased (Stylized-ImageNet) checkpoint was this
+idea's precedent and lost by 5.7pt; sketches are strokes, silhouettes are
+filled regions; community checkpoints trade ImageNet's scale for a partial
+domain match.
+
+- [ ] **p4-sketch-checkpoint** — one credible sketch/QuickDraw-pretrained
+      backbone, best input channels from Phases 1-3, one run.
+- [ ] **p4-sketch-edge** — same checkpoint with the edge channel: a stroke-
+      pretrained network sees contours natively, so edge may interact.
+- The stronger domain-matched alternative if this fails: pretrain on all-gen
+  Pokémon silhouettes (~900 classes beyond Gen 1, scrapable with the existing
+  pipeline) — gated on the leak-decomposition item in Phase 5 saying data
+  quantity matters.
+
+## Phase 5 — Backlog: everything never rigorously tested
+
+In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
+
+- [ ] **leak decomposition** — train on the full unfiltered set, validate only
+      on twin-free images; separates "measurement was wrong" from "we halved
+      the data", and gates data expansion (the strongest untested lever).
+- [ ] **depth re-sweep** (lastN ∈ {2,3,4,6}) — last swept on the discarded
+      shape-biased checkpoint; skip 5/7 (not distinct configs).
+- [ ] **optimizer** — AdamW was assumed, never swept; SGD+momentum, Adam.
+- [ ] **weight decay, BN affine** — the unfinished regularization axes; low
+      expected value (gap is not predictive), run for completeness.
+- [ ] **single-channel stem** — sum pretrained RGB filters; "drop the
+      redundant capacity" vs Phase 1's "fill it".
+- [ ] **aspect-preserved crop** — bbox-crop + pad; resolution gain at a size
+      cost N1 measured as ~zero.
+- [ ] **backbone re-check** — resnet18 vs 50 was 1.9× SEM, just under the bar.
+- [ ] **confusion-study leftovers** — body-plan-aware descriptor, error rate
+      by generation (+ generation-held-out split), cross-class near-duplicate
+      check, embedding visualization, hard-example contact sheet.
+
+## Phase 6 — Final: ensemble, then the one-shot test evaluation
+
+Ensembling stays out of exploration (it multiplies every experiment's cost and
+judges later changes as ensembles, which is not how they'd ship). At the end,
+on the settled config:
+
+- [ ] **Seed ensemble within each fold** and/or **TTA** (identity + hflip +
+      small rotations) — valid on OOF data.
+- [ ] **Fold ensemble on the held-out test split only.** Averaging the K fold
+      models against `oof_predictions.json` is leakage: each image is
+      out-of-fold for exactly one model, in-training for K−1 — the shiny
+      mistake from the opposite direction.
+- [ ] **One-shot test evaluation** — never-touched 15% split, binomial CI,
+      no tuning afterwards; anything learned becomes a new hypothesis.
 
-The reference every later phase is measured against: the old "winning" config
-(`resnet50`, shape-biased weights, `lastN=3`, `blr=2e-4`, `clr=1e-3`,
-`wd=2e-3`, `ls=0.2`, `epochs=16`), evaluated honestly.
-
-- [x] **c0-leaky-reference** — old data *and* old split, to prove the pipeline
-      still reproduces the historical number and that the drop below is caused by
-      the split rather than a code change. Scored **0.908**, matching the
-      historical 0.908 exactly.
-  ```bash
-  uv run python scripts/training.py --run-name c0-leaky-reference --no-exclude-shiny --val-size 0.1 --test-size 0.1
-  ```
-- [x] **c0-singlesplit-seed{42,43,44}** — clean data, single split
-  ```bash
-  uv run python scripts/training.py --run-name c0-singlesplit-seed42 --random-state 42
-  ```
-- [x] **c0-5fold** — clean data, 5-fold grouped CV. **The baseline.**
-  ```bash
-  uv run python scripts/training.py --run-name c0-5fold --folds 5
-  ```
-
-**Results:**
-
-| run | data | n | top-1 | top-3 | top-5 | gap |
-|---|---|---|---|---|---|---|
-| c0-leaky-reference | leaky | 217 | 0.908 | 0.940 | 0.945 | +0.279 |
-| c0-singlesplit-seed42 | clean | 196 | 0.612 | 0.781 | 0.847 | +0.839 |
-| c0-singlesplit-seed43 | clean | 196 | 0.607 | 0.806 | 0.842 | +0.790 |
-| c0-singlesplit-seed44 | clean | 196 | 0.633 | 0.816 | 0.842 | +0.769 |
-| **c0-singlesplit (mean)** | clean | | **0.617 ± 0.014** | 0.801 | 0.844 | +0.799 |
-| **c0-5fold (pooled OOF)** | clean | **1110** | **0.596** | **0.760** | **0.813** | **+0.936** |
-
-Per-fold: 0.577 / 0.599 / 0.595 / 0.613 / 0.599 — **mean 0.596, stdev 0.013,
-SEM 0.006**.
-
-### The baseline
-
-**`oof_accuracy` = 0.596, SEM 0.006, n = 1110.** This is the number every later
-phase is compared against. It is ~2pt below the single-split estimate (0.617),
-in the expected direction and for two identifiable reasons: grouped folds also
-exclude the residual 4.4% of near-duplicates that a random split still leaked,
-and each fold trains on slightly less data (888 vs 914).
-
-The fold spread is genuinely tight this time — stdev 0.013 against a ±1.5pt
-binomial floor at n=1110, so the estimate is consistent with sampling noise
-rather than suspiciously below it, which is exactly the check the old 0.007
-failed.
-
-The train/val gap widened again, to **+0.936** (from +0.799 single-split, and
-+0.279 under leakage). Removing the last near-duplicates removed the last of the
-free score. A gap approaching 1.0 nat on 888 training images is the clearest
-statement of the problem: **this configuration is badly overfit, and the honest
-headroom is in regularization and data, not in more capacity.** That is the
-opposite of what the leaky file concluded. (Both halves of that prediction were
-later falsified — see "What the failures collectively point at" below.)
-
-Two findings that shape everything below:
-
-**The train/val gap tripled** (0.279 → ~0.80). The old file read `lastN=3`'s
-tight gap as evidence of good regularization; it was structural, since `val_loss`
-was partly re-measuring `train_loss`. Honestly measured, this config overfits
-hard — 914 training images against ~23.5M trainable parameters.
-
-**The top-1/top-5 spread widened from 3.7pt to 22.7pt.** Under leakage the model
-retrieved a memorized exact match, so top-1 and top-5 nearly coincided. Honestly,
-the answer is usually in the top 5 but often not first — genuine confusion
-between similar silhouettes, which is what Phase C9 exists to characterize.
-
-Caveat carried forward: part of the 29-point drop is honest measurement and part
-is the smaller training set (914 vs 1729). Phase C1's first item separates them.
-
----
-
-## Phase C1 — How deep to fine-tune
-
-The foundational ablation, and the one most likely to have been distorted:
-capacity was selected when memorizing duplicates *was* the winning strategy.
-**Prediction: the honest optimum is shallower than `lastN=3`.**
-
-- [ ] **c1-leak-decomposition** — train on the full unfiltered set, validate only
-      on images with no twin in train. Same training data as the leaky runs,
-      honest evaluation. Separates "measurement was wrong" from "we now have half
-      the data", which the 0.908 → 0.617 drop currently confounds. Do this first;
-      it determines whether more scraping is worth it. Not run; still open.
-
-`lastN=3` was the default when this ran and is therefore identical to `c0-5fold`
-(deterministic at the same seed), so it was not re-run.
-
-- [ ] **c1-lastN0** — head only — *prior (invalid): 0.544*
-  ```bash
-  uv run python scripts/training.py --run-name c1-lastN0 --folds 5 --train-last-n-layers 0
-  ```
-- [ ] **c1-lastN1** — *prior (invalid): 0.843*
-  ```bash
-  uv run python scripts/training.py --run-name c1-lastN1 --folds 5 --train-last-n-layers 1
-  ```
-- [ ] **c1-lastN2** — *prior (invalid): 0.880*
-  ```bash
-  uv run python scripts/training.py --run-name c1-lastN2 --folds 5 --train-last-n-layers 2
-  ```
-- [x] **c1-lastN3** — = `c0-5fold`, **0.596** — *prior (invalid): 0.908*
-- [x] **c1-lastN4** — *prior (invalid): 0.876*
-  ```bash
-  uv run python scripts/training.py --run-name c1-lastN4 --folds 5 --train-last-n-layers 4
-  ```
-- [x] **c1-lastN5** — identical to `lastN=4`, see below — *prior (invalid): 0.857*
-- [ ] **c1-lastN6** — the only genuinely deeper point (adds `conv1`)
-  ```bash
-  uv run python scripts/training.py --run-name c1-lastN6 --folds 5 --train-last-n-layers 6
-  ```
-
-**Results:**
-
-| run | trainable | oof top-1 | SEM | per-fold |
-|---|---|---|---|---|
-| c1-lastN0 | 309,399 | 0.156 | 0.002 | — |
-| c1-lastN1 | 15,251,607 | 0.520 | 0.015 | — |
-| **c1-lastN2** | 22,329,495 | **0.606** | 0.012 | 0.613 0.595 0.572 0.644 0.608 |
-| c1-lastN3 (= c0-5fold) | 23,541,911 | 0.596 | 0.006 | 0.577 0.599 0.595 0.613 0.599 |
-| c1-lastN4 | 23,754,903 | 0.565 | 0.041 | **0.405** 0.631 0.563 0.608 0.617 |
-| c1-lastN5 | 23,754,903 | 0.565 | 0.041 | *(identical run)* |
-
-**`lastN=5` is not a distinct configuration — it is `lastN=4`.** The
-parameterized feature layers are `[conv1, bn1, layer1, layer2, layer3, layer4]`,
-so `lastN=5` additionally unfreezes `bn1`, whose only parameters are BN affine —
-and `set_batch_norm_trainable(trainable=False)` runs afterwards and re-freezes
-exactly those. Both produce 23,754,903 trainable parameters and, at a fixed seed,
-byte-identical predictions (627/1110). `lastN=7` collapses onto `lastN=6` the
-same way.
-
-This retroactively breaks part of the old depth sweep, which recorded
-`lastN=4` → 0.876 and `lastN=5` → 0.857 as separate data points. They were the
-same configuration run twice. **That 1.9pt spread is a direct measurement of
-run-to-run noise between identical setups** — independent confirmation that the
-old ±3-4pt significance threshold was far too tight, requiring no statistical
-argument at all. Only `lastN` ∈ {0,1,2,3,4,6} are distinct; a sweep should skip
-5 and 7, or pass `--train-batch-norm-affine` to make `bn1` meaningful.
-
-**Depth is a plateau, not a peak.** 0.606 / 0.596 / 0.565 across lastN 2/3/4 sit
-within ~1-2× their combined SEMs, so the "shallower is better" prediction from
-the leaky-era critique is **not confirmed** — merely not contradicted. What is
-clear is the floor: `lastN=0` (0.156) and `lastN=1` (0.520) are decisively worse,
-far below their leaky-era priors of 0.544 and 0.843. The leak flattered the
-weakest configurations most, which makes sense — a frozen backbone can still
-retrieve a memorized duplicate.
-
-**`lastN=4` is unstable rather than worse.** Its fold 1 collapsed to 0.405 while
-the other four (0.563-0.631) sit on the plateau; excluding it the mean is 0.605,
-identical to `lastN=2`. The bare mean would read as "depth 4 is worse", which is
-the wrong conclusion. Its fold-1 gap (+0.97) is unremarkable, so train and val
-loss moved together — divergence, not overfitting.
-
-That is the same signature as the one surviving leaky-era finding
-(`blr=4e-4` collapsing at `lastN=3`), one axis over: with ~23M parameters
-unfrozen, a constant LR and **no warmup or schedule at all**, deep unfreezing
-sits near an instability boundary. This promotes **C5 (cosine + warmup)** from
-"training-loop gap" to a likely prerequisite for using any depth ≥ 3 reliably,
-and it should be run before drawing a final conclusion about depth.
-
-## Phase C2 — Backbone capacity
-
-resnet50 beat resnet18 by 2.8pt under leakage. Larger models memorize better, so
-that comparison was measuring the wrong thing. **Prediction: the gap narrows or
-reverses.** Run at the best depth from C1, not the old default.
-
-Run at a fixed `lastN=3` so the comparison is apples-to-apples with `c0-5fold`
-and with each other. Re-check the winner at C1's best depth afterwards, since
-the optimal depth may differ per architecture.
-
-- [x] **c2-resnet18** — *prior (invalid): 0.880*
-  ```bash
-  uv run python scripts/training.py --run-name c2-resnet18 --folds 5 --model-name resnet18 --weights-checkpoint None
-  ```
-- [x] **c2-resnet34** — *prior (invalid): 0.876*
-  ```bash
-  uv run python scripts/training.py --run-name c2-resnet34 --folds 5 --model-name resnet34 --weights-checkpoint None
-  ```
-- [x] **c2-resnet50-standard** — *prior (invalid): 0.871*
-  ```bash
-  uv run python scripts/training.py --run-name c2-resnet50-standard --folds 5 --model-name resnet50 --weights-checkpoint None
-  ```
-- [x] **c2-resnet50-shape** — = `c0-5fold`, **0.596** — *prior (invalid): 0.908*
-
-**Results** (all at `lastN=3`, identical hyperparameters):
-
-| run | weights | oof top-1 | SEM | top-5 | gap | per-fold |
-|---|---|---|---|---|---|---|
-| **c2-resnet50-standard** | ImageNet | **0.653** | 0.013 | 0.837 | +0.977 | 0.644 0.649 0.613 0.671 0.689 |
-| c2-resnet18 | ImageNet | 0.618 | 0.013 | 0.812 | +1.048 | 0.622 0.644 0.568 0.622 0.635 |
-| c0-5fold | shape-biased | 0.596 | 0.006 | 0.813 | +0.936 | 0.577 0.599 0.595 0.613 0.599 |
-| c2-resnet34 | ImageNet | 0.584 | 0.019 | 0.798 | +1.069 | 0.608 0.599 0.509 0.604 0.599 |
-
-**Headline: the shape-biased checkpoint is actively harmful.**
-`c2-resnet50-standard` vs `c0-5fold` is the cleanest controlled comparison in
-this whole investigation — same architecture, same depth, same hyperparameters,
-differing *only* in pretrained-weight origin. Standard ImageNet weights win by
-**5.7pt, or 4.0× the combined SEM.** That clears the 2× bar comfortably and is
-the first result here that is unambiguously significant rather than suggestive.
-
-This inverts the premise the entire leaky-era configuration was built on.
-`resnet50` was adopted *specifically* to use the shape-biased checkpoint, on the
-theory that texture-free silhouettes suit a contour-biased backbone. The theory
-is appealing and the evidence for it (0.908) was the single most leak-inflated
-number in the old file. Tested honestly, it costs ~6 points.
-
-Worth noting the old file contained a hint of this that was explained away at
-the time: at `lastN=2`, shape-biased already underperformed standard weights
-(0.862 vs 0.871). That was dismissed as noise on the way to the `lastN=3`
-result. It was the real signal.
-
-**Capacity is not the axis; weight origin is.** With the checkpoint controlled
-for, the ordering is resnet50 (0.653) > resnet18 (0.618) > resnet34 (0.584) —
-not monotonic in size, and the 50-vs-18 gap is 1.9× SEM, just under the bar. The
-"smaller model for a small dataset" prediction is **not** supported: the largest
-backbone won. What had looked like a capacity effect in C2's first three results
-was the checkpoint confound.
-
-**Still badly overfit.** Every gap here is ~+1.0, and the best config's top-5
-(0.837) is 18pt above its top-1 (0.653). Neither architecture nor weights fixes
-that — it is what C3 (regularization), C5 (schedule) and C7 (augmentation) are
-for.
-
-### Default changed after this phase
-
-`weights_checkpoint` now defaults to `None` (standard ImageNet weights) instead
-of the shape-biased checkpoint. **The defaults are therefore exactly
-`c2-resnet50-standard`, and the working baseline is 0.653, not 0.596.**
-
-Consequences for reading the rest of this file:
-
-- Every phase from C7 onward is measured against **0.653**.
-- C1's depth sweep and the C0 baseline were run on the shape-biased checkpoint
-  and are *not* directly comparable to anything run after this point.
-- To reproduce anything from C0-C2 that used the checkpoint, pass
-  `--weights-checkpoint weights/resnet50_shape_biased.pth.tar` explicitly.
-
-Two follow-ups this opens:
-
-- **Re-run C1's depth sweep on standard weights.** `lastN=3` was selected for the
-  shape-biased checkpoint; the depth plateau may sit elsewhere.
-- **Re-check the shape-biased hypothesis at low depth.** It is plausible that
-  contour-biased features help only when mostly frozen (`lastN` ∈ {0,1}), and
-  that fine-tuning 98.8% of the network simply overwrites them. That would
-  rescue the underlying idea while confirming this configuration was wrong.
-
-The shape-biased hypothesis is worth a genuine retest rather than an inherited
-verdict. Silhouettes have zero texture, so a contour-biased backbone *should*
-help — but the old evidence for it (0.908) was the single most leak-inflated
-number in the file, and at shallow depth it actually underperformed standard
-weights (0.862 vs 0.871).
-
-## Phase C3 — Regularization (label smoothing done; rest deferred to D1)
-
-**Hypothesis tested and rejected.** `label_smoothing=0.2` was suspected of
-suppressing top-1 discrimination between similar classes — it deliberately blurs
-the target distribution and caps confidence, which is the opposite of what sharp
-separation needs. Swept downward against the 0.653 baseline:
-
-| label smoothing | oof top-1 | SEM | delta | train/val gap |
-|---|---|---|---|---|
-| 0.00 | 0.618 | 0.017 | -3.5pt | +1.885 |
-| 0.05 | 0.653 | 0.008 | 0.0pt | +1.321 |
-| 0.10 | 0.653 | 0.014 | 0.0pt | +1.153 |
-| 0.15 | 0.651 | 0.010 | -0.2pt | +1.082 |
-| **0.20** (default) | **0.653** | 0.013 | — | **+0.977** |
-
-Removing it entirely costs 3.5pt (-1.6× SEM); everything from 0.05 to 0.2 is
-flat. The hypothesis behind this phase was wrong.
-
-**The more important result is in the gap column.** The train/val gap responds
-strongly and monotonically to label smoothing — 1.885 → 0.977, nearly halved —
-while accuracy does not move at all across that range. **The gap is therefore not
-predictive of accuracy here, and optimising it is not a route to accuracy.**
-
-That retires a thread running through this whole file. The +0.977 gap was read at
-C0 as "badly overfit, so the headroom is in regularization and data". Both halves
-are now falsified directly: regularization moves the gap without moving accuracy
-(here), and augmentation moves neither (C7). The gap is real but it is not the
-binding constraint.
-
-### Model diversity: the ensemble headroom is larger than assumed
-
-Comparing *which* images each config gets right (all five score ~725/1110, but
-not on the same images — pairwise Jaccard is only 0.75-0.82):
-
-| | images |
-|---|---|
-| correct in any single config | ~725 (65.3%) |
-| correct in **all five** configs | 523 (47.1%) |
-| correct in **at least one** config | 880 (79.3%) |
-| never correct in any config | **230 (20.7%)** |
-
-Five configs that score identically disagree on ~20% of their predictions. That
-is high variance in *what gets learned*, which is what 888 training images
-predicts.
-
-Two consequences, neither of which is "ensemble now":
-
-- **There is real headroom for D5 at the end** — but it stays at the end. See D5
-  for why making it the exploration baseline would be a mistake.
-- **The 230 images no configuration ever gets right are the better analysis
-  target** than any single run's error set, which is ~20% arbitrary. They isolate
-  what is hard about the representation from what is noisy about a run, and are
-  the right input to a C9-style study.
-
-The 880 figure is an upper bound on ensembling, not an expectation — an ensemble
-lands nearer the average than the union.
-
-Remaining regularization axes (weight decay, batch-norm affine) move to **D1**.
-
-## Phase C4 — Learning rates (superseded by D2)
-
-- [ ] **c4-blr{1e-4,2e-4,3e-4}** — bisects the collapse. This is the one old
-      finding that survives: `blr=4e-4` did not degrade, it collapsed (-49.8pt).
-      Locate the actual ceiling.
-- [ ] **c4-clr{5e-4,1e-3,2e-3}** — the classifier LR was never swept at all.
-- [ ] **c4-bn-eval** — *prior (invalid): -10pt.* Cheap to confirm.
-
-## Phase C5 — Schedule and epochs (superseded by D2)
-
-There is **no LR scheduler at all** — constant LR for 16 epochs. This is an
-absence, not a tuning axis, and it is the most likely explanation for the
-`blr=4e-4` collapse (no warmup at 98.8% unfrozen).
-
-- [ ] **c5-cosine-warmup** — cosine decay + short warmup
-- [ ] **c5-best-checkpoint** — `train_outer_loop` returns the *final-epoch* model
-      and that is what gets scored; the best epoch is never restored. Free
-      accuracy, and removes `epochs` as a tuning axis.
-- [ ] **c5-epochs{12,16,24,32}** — `val_loss` was still falling at epoch 16 on
-      clean data, so the old "flat past 16" verdict does not carry over.
-
-## Phase C6 — Optimizer (superseded by D3)
-
-Never swept; `AdamW` was assumed throughout.
-
-- [ ] **c6-sgd-momentum**, **c6-adam**, **c6-adamw** at matched tuned LR.
-
----
-
-## Phase C7 — Augmentation
-
-Current train transform is a single `RandomAffine(±20°, ±20%, 0.85-1.15×)`.
-With 914 real training images and a ~0.80 gap, this is where the largest honest
-gains most likely are.
-
-**Baseline: 0.653** (`c2-resnet50-standard`, which is now exactly the defaults).
-Each augmentation is a separate `ExperimentConfig` flag and is tested **one at a
-time** first, so single effects are attributable before anything is combined.
-The always-on `RandomAffine(±20°, ±20%, 0.85-1.15×)` stays in every run,
-including the baseline — these are additions to it, not replacements.
-
-- [ ] **c7-hflip** — `RandomHorizontalFlip(0.5)`. Sprite facing direction is
-      arbitrary (later generations flipped the convention) and a mirrored
-      silhouette is the same Pokémon, so this roughly doubles effective data.
-  ```bash
-  uv run python scripts/training.py --run-name c7-hflip --folds 5 --augment-hflip
-  ```
-- [ ] **c7-morphological** — dilate/erode the mask by 1-2px (max-filter, and the
-      same filter on the inverted mask). Perturbs contour thickness, which varies
-      systematically by sprite generation.
-  ```bash
-  uv run python scripts/training.py --run-name c7-morphological --folds 5 --augment-morphological
-  ```
-- [ ] **c7-resolution-jitter** — re-render at a random original sprite resolution
-      (56/64/80/96/120/128) before upsampling back to 224. Attacks the
-      generation-dependent edge artifact at its source.
-  ```bash
-  uv run python scripts/training.py --run-name c7-resolution-jitter --folds 5 --augment-resolution-jitter
-  ```
-- [ ] **c7-elastic** — mild `ElasticTransform(alpha=40, sigma=5)`; a pose change
-      is roughly an elastic deformation.
-  ```bash
-  uv run python scripts/training.py --run-name c7-elastic --folds 5 --augment-elastic
-  ```
-- [ ] **c7-stack** — combine whichever clear the 2× SEM bar individually. Run
-      only after the singles, since combined effects are rarely additive.
-
-**Results** (baseline `c2-resnet50-standard` = 0.653, SEM 0.013, gap +0.977):
-
-| run | oof top-1 | SEM | delta | × SEM | top-5 | gap |
-|---|---|---|---|---|---|---|
-| c7-morphological | 0.670 | 0.014 | +0.017 | +0.91 | 0.841 | +0.895 |
-| c7-hflip | 0.668 | 0.018 | +0.015 | +0.68 | 0.827 | +0.920 |
-| *baseline* | *0.653* | *0.013* | — | — | *0.837* | *+0.977* |
-| c7-resolution-jitter | 0.645 | 0.014 | -0.008 | -0.42 | 0.824 | +1.018 |
-| **c7-elastic** | **0.605** | 0.019 | **-0.049** | **-2.13** | 0.792 | +1.133 |
-
-**Augmentation is not the lever it was predicted to be.** Nothing cleared the 2×
-SEM bar in the positive direction. The only result that cleared it at all is
-`elastic`, which is **significantly worse** — the single largest effect in the
-phase is a harm, not a gain. The pre-registered estimate of +3-8pt for this
-phase was wrong, and the reasoning behind it ("the dataset is small, so data
-variety is the binding constraint") does not survive contact with the data.
-
-**Why elastic hurts, and what it implies.** For most image tasks a mild elastic
-warp is a safe augmentation because the label survives local deformation. Here
-the silhouette outline *is* the entire signal — there is no texture, no colour,
-no interior detail to fall back on. Warping the contour destroys
-label-relevant information rather than adding invariance. That is the same
-reason `resolution-jitter` is flat-to-negative: it was aimed at an artifact, but
-it degrades shape while doing so.
-
-This reframes the problem. The ~+1.0 train/val gap is **not** primarily a
-data-variety problem, because the interventions that add variety do not close
-it. `hflip` and `morphological` each moved it only slightly (0.920 and 0.895),
-and in proportion to their tiny accuracy gains.
-
-**What is worth keeping.** `hflip` and `morphological` are both modestly
-positive, both reduce the gap, and are the only two that do either. Individually
-neither is significant, but they are label-preserving by construction (a
-mirrored silhouette is the same Pokémon; a 1px thicker outline is the same
-Pokémon), which is a prior worth something beyond the measurement. They are the
-right candidates for the stack.
-
-**Recommended next runs, in order:**
-
-1. **`c7-baseline-seed43`** — a second-seed baseline. Every C7 delta is measured
-   against a single reference run whose own seed variation is unknown. At these
-   effect sizes (1.5-1.7pt) that reference is doing more work than it can bear.
-   This is the cheapest way to find out whether the two positives are real.
-2. **`c7-stack-hflip-morph`** — the two label-preserving augmentations together.
-3. **C9, moved earlier.** Top-5 is 0.837 against top-1 0.653 and augmentation
-   did not move it. That 18pt spread is the model shortlisting correctly and
-   choosing wrong, which is a discrimination problem between similar shapes —
-   exactly what C9 measures. If a large share of the remaining error is pairs
-   that are genuinely inseparable as silhouettes, the ceiling is well below 1.0
-   and C3-C6 deserve much less effort than planned. **Run C9 before more
-   tuning.**
-
-Deferred to a later pass: RandAugment (geometric ops only — colour ops are
-no-ops after thresholding), MixUp and CutMix. Those change the loss target as
-well as the input, so they are a different kind of intervention and would
-confound this comparison.
-
-**Implementation note.** The binary threshold `(x > 0.5)` runs *after* the
-geometric augmentations, so any interpolation they introduce is re-binarized and
-the silhouette stays hard-edged. That is deliberate and is what makes
-`morphological` and `resolution-jitter` distinct interventions rather than
-variations on blur — verified: all four produce masks with exactly two distinct
-pixel values.
-
-## Phase C8 — Inference-time gains (superseded by D5)
-
-- [ ] **c8-tta** — identity + hflip + small rotations. Typically +1-2pt for no
-      training cost.
-- [ ] **c8-ensemble** — average logits over the K fold models. Nearly free, since
-      K-fold already trains them.
-- [ ] **c8-arcface** — angular-margin head instead of linear + CE. Directly
-      motivated by C9's premise: an angular margin is the standard remedy for
-      near-identical classes.
-- [ ] **c8-distance-transform** — feed a signed distance transform of the mask
-      rather than a binary silhouette replicated across 3 ImageNet-normalized
-      channels. Carries shape information a binary edge does not.
-
----
-
-## Phase C9 — Data-centric study
-
-The original motivation: *which Pokémon does the model confuse, and is that
-confusion legitimate?* This was impossible under the old protocol — 217 val
-images over 151 classes is ~1.4 per class, so a confusion matrix would be
-essentially empty. Pooled out-of-fold predictions give ~7 per class over 1110
-images, and every sweep above emits them as `oof_predictions.json`.
-
-- [x] **Confusion matrix + confusion-vs-similarity.** Run against any
-      `oof_predictions.json`:
-  ```bash
-  uv run python scripts/confusion_study.py --run-name c2-resnet50-standard
-  ```
-
-**Results** (baseline `c2-resnet50-standard`, 1110 out-of-fold predictions).
-Similarity is max IoU between any two images of two classes, computed on
-bbox-cropped, scale-normalised masks — raw IoU would be dominated by the
-generation sprite-scale artifact (45% of frame in Gen 1 vs 13% in Gen 6).
-
-Near-identical class pairs are **rare**:
-
-| IoU threshold | pairs (of 11,325) | share |
-|---|---|---|
-| > 0.95 | 1 | 0.01% |
-| > 0.90 | 3 | 0.03% |
-| > 0.85 | 41 | 0.36% |
-| > 0.80 | 538 | 4.75% |
-
-Top offenders: electrode/voltorb **0.969**, kabuto/voltorb 0.921,
-electrode/kabuto 0.916, ditto/kabuto 0.894 — the predicted Voltorb/Electrode
-case is real and is the single most similar pair in the dataset.
-
-Confusions vs. similarity, over 385 top-1 errors:
-
-| | mean IoU |
-|---|---|
-| confused pairs (true vs. predicted) | 0.723 |
-| random class pairs | 0.693 |
-| **lift** | **1.04×** |
-
-| errors above IoU | share | random baseline |
-|---|---|---|
-| 0.90 | 2.1% | 0.0% |
-| 0.85 | 3.4% | 0.2% |
-| 0.80 | 13.2% | 4.4% |
-
-**The irreducible floor is small — the ceiling is not the problem.** Shape
-similarity predicts confusion only in the extreme tail: above IoU 0.85 the
-enrichment is ~17× over chance, but that tail covers just 3.4% of errors. The
-bulk mean lift is 1.04×, essentially nothing. **Genuine silhouette collisions
-explain a few percent of the 34.7% error rate, not most of it.**
-
-This contradicts the hypothesis raised when C7 failed — that much of the
-remaining error might be irreducible and C3-C6 therefore not worth running. It
-is not irreducible. The model is genuinely underperforming a task that is mostly
-solvable, so tuning is worth the effort after all.
-
-**Shape similarity does not explain the top-1/top-5 spread**, which was the
-specific question asked of this study:
-
-| error type | n | mean IoU of the wrong top-1 |
-|---|---|---|
-| true class still in top-5 | 204 | 0.723 |
-| true class outside top-5 | 181 | 0.723 |
-
-Identical to three decimals. So near-miss errors (right answer demoted to
-top-3/5) are **not** the silhouette-collision cases. The 18pt top-1/top-5 gap is
-not "the model correctly identifies a genuinely ambiguous pair and picks the
-wrong one" — it is something else, and an angular-margin loss motivated by
-"classes look alike" rests on a premise this does not support.
-
-Note also that only 53% of errors have the true class anywhere in the top-5, so
-nearly half are outright misses rather than near misses.
-
-**The frequent confusions are evolution lines, not shape twins:**
-pidgeot→pidgeotto (0.794), nidorino→nidoran-m (0.762), bulbasaur→ivysaur
-(0.844), zubat→golbat (0.638), ponyta→rapidash (0.658), caterpie→weedle (0.836),
-dragonair→dratini (0.595). Several have unremarkable IoU. These share a *body
-plan* while differing in size and detail — which the crude max-IoU metric does
-not capture. Worst classes: nidoran-m (0.00 accuracy), vaporeon (0.12),
-zubat (0.14), pidgeot (0.14), farfetchd (0.14).
-
-**Caveat on the metric.** Mean cross-class IoU is 0.697 with a median of 0.698 —
-scale-normalised filled blobs overlap heavily by construction, so the measure
-has poor dynamic range. A 1.04× lift may be attenuated by that rather than
-genuinely absent. The top-5-vs-lost comparison is the more robust finding, since
-both groups are scored by the same metric. Worth re-checking with a descriptor
-that captures body plan (turning-function distance, shape context, or IoU after
-per-image rotation alignment) before concluding the shape hypothesis is dead.
-
-- [ ] **Re-run with a body-plan-aware descriptor** before closing this question.
-- [ ] **Error rate by sprite generation.** Raw image size is a near-perfect
-      generation proxy (56×56 = Gen 1 … 128×128 = Gen 6+). Are low-res early
-      sprites disproportionately wrong? And does a *generation*-held-out split
-      (train Gen 1-5, test Gen 6+) drop further than the duplicate-grouped split?
-      That tests directly whether the model keys on rendering artifacts rather
-      than shape.
-- [ ] **Cross-class near-duplicate check.** The audit only compared *within*
-      class. Run the same IoU comparison across classes: any pair above 0.97 is
-      label noise rather than difficulty.
-- [ ] **Per-class accuracy vs. class-mean silhouette complexity.** Do simple
-      blobs (Voltorb, Ditto, Grimer) fail more than distinctive outlines?
-- [ ] **Embedding visualization.** t-SNE/UMAP of penultimate features on OOF
-      data, coloured by class and by generation. Clusters organizing by
-      generation rather than by Pokémon *is* the shortcut, visualized.
-- [ ] **Hard-example contact sheet.** Render the highest-loss silhouettes.
-      Cheapest way to catch processing bugs — the three masking branches in
-      `data_processing.py` are a plausible source of silently malformed masks.
-
-
----
-
-# Results so far
-
-| phase | question | answer | verdict |
-|---|---|---|---|
-| C11 audit | is 0.906 real? | no — 62% of val had a pixel-identical twin in train | **0.906 → 0.617** |
-| C0 | honest baseline | 5-fold grouped CV, n=1110 | **0.596** (shape-biased) |
-| C1 | how deep to fine-tune? | plateau across lastN 2/3/4; lastN=5 is not a distinct config | no gain |
-| C2 | which backbone/weights? | ImageNet beats shape-biased by 5.7pt at 4.0× SEM | **+5.7pt → 0.653** |
-| C7 | does augmentation help? | no; elastic actively hurts (−4.9pt, 2.1× SEM) | no gain |
-| C9 | is the error irreducible? | no — shape collisions explain ~3% of errors, not most | ceiling is not the limit |
-| C3 (partial) | is label smoothing hurting top-1? | no — removing it costs 3.5pt | hypothesis wrong |
-| N1 | is the affine destroying the size cue? | no — removing scale jitter moves neither accuracy nor evolution-line confusions | no gain; N2 rescoped |
-| N2 (multichannel) | does a richer input encoding help? | SDT +1.9pt pooled (2.0×) but 0.9× vs the real default — unconfirmed; mask polarity alone worth ~3pt; curv proxy dead | no confirmed gain |
-
-**One real gain in the entire investigation: +5.7pt, from dropping the
-shape-biased checkpoint.** Everything else either did nothing or was a
-correction to a measurement error. That is the honest shape of the work — most
-of the value so far has been in finding out that 0.906 meant 0.617, not in
-moving the number upward.
-
-Current best: **0.653** (`c2-resnet50-standard`, which is now the default
-config), SEM 0.013, train/val gap +0.977. The best *candidate* is
-`--input-channels mask sdt mask` at 0.674/0.666 over two seeds — sign-consistent
-but below the significance bar; see the N2 results before promoting it.
-
-### What the failures collectively point at
-
-Four independent interventions failed in a consistent direction:
-
-- Augmentation that adds *input variety* (C7) did not close the gap.
-- Deeper fine-tuning (C1) did not help; the plateau starts at lastN=2.
-- Removing label smoothing (C3) hurt, so the model is not over-regularised.
-- Genuine silhouette collisions (C9) explain almost none of the error.
-
-Taken together these say the bottleneck is **not** capacity, not regularisation,
-not data variety, and not task ambiguity. It is that the *representation reaching
-the network does not carry enough discriminating information* — which is what the
-active plan below attacks.
-
-### The scale finding (analysis, not an experiment)
-
-Measured while investigating the evolution-line confusions that dominate C9:
-
-- **Artifact.** Later generations draw on roomier canvases: the creature fills
-  ~45% of the frame in Gen 1 and ~13% in Gen 6, a **2.06×** range across
-  generation medians.
-- **Signal.** Within a generation, bigger Pokémon are drawn bigger — size rises
-  monotonically along the evolution line in **80 of 84 cases (95%)**, spread
-  **1.83×**.
-
-The two are the same magnitude, so they cancel: a Gen 6 Venusaur can occupy the
-same pixel area as a Gen 1 Bulbasaur. Size is therefore near-useless as a species
-cue in the current framing.
-
-**Normalising this away using the sprite's generation is rejected**, along with
-estimating generation from nearest-neighbour block structure (which is ~90%
-recoverable). Both are shortcuts: generation is metadata absent from an arbitrary
-input, and the block-structure estimator exploits an artifact of this specific
-scraping pipeline rather than anything about Pokémon. Solving the small problem
-that way would not generalise, which is the point of the exercise. The code for
-it has been removed rather than left behind a flag.
-
-What survives from this finding is the *diagnosis*, and it directly motivates
-N1 and N2: absolute size cannot be recovered without a reference, so **relative
-proportion has to replace it**. Pidgeot is not merely a larger Pidgey — the crest
-and tail proportions differ. Venusaur has a flower Bulbasaur lacks.
-
----
-
-# Active plan
-
-Renumbered N1-N3 by execution order. Completed phases keep their original C
-numbers so earlier commits still resolve. Everything previously numbered C10-C12
-is superseded by what follows.
-
-**Next session starts at N2, as rescoped by N1's verdict below.** Every phase
-here is measured as a **single model
-under 5-fold grouped CV**, which is the protocol every earlier result used and
-the only one that keeps comparisons honest — see the note under D5 on why
-ensembling is deliberately excluded from the exploration phase.
-
-## Phase N1 — Settle augmentation, including removing what hurts (done)
-
-C7 tested additions. This phase tests **subtraction**, which C7 never did, and
-which the scale finding makes urgent.
-
-The always-on `RandomAffine` includes `scale=(0.85, 1.15)` — a 1.35× random
-rescale on every training image, against a within-generation size signal of
-1.83×. **We are randomising away roughly three quarters of the range that
-separates Pidgey from Pidgeot**, i.e. explicitly training the network to discard
-the cue we need. ResNet's final `AdaptiveAvgPool2d((1,1))` then collapses spatial
-extent again, so what survives the augmentation is attenuated at the head.
-
-This is the cheapest experiment available and it gates the rest of the size
-theory: if narrowing the scale augmentation moves evolution-line confusions, the
-proportion work in N2 is worth building. If it does nothing, the size cue is
-weaker than assumed and N2 should be rescoped before any of it is written.
-
-- [x] **n1-noscale** — `scale=(1.0, 1.0)`, size preserved exactly
-- [x] **n1-narrowscale** — `scale=(0.95, 1.05)`
-- [x] **n1-norotate** — `degrees=0`; rotation may also be destroying pose cues
-- [x] **n1-notranslate** — `translate=(0.0, 0.0)`
-- [x] **n1-baseline-seed43** — the defaults at `--random-state 43`; C7's
-      recommended reference-variance check, since every delta here is measured
-      against a single reference run
-- [x] **n1-hflip-morph** — the two C7 augmentations that trended positive,
-      combined. Pre-registered rule: stack on the winning subtraction, or on the
-      default affine if nothing wins. Nothing won, so this ran on the defaults —
-      a pure test of whether the C7 positives combine.
-- [x] **n1-rerun-confusion-study** — evolution-line confusion rate, not just
-      headline accuracy. That is the mechanism being tested.
-
-The affine is now configurable (`--affine-degrees`, `--affine-translate`,
-`--affine-scale MIN MAX`), with defaults reproducing the previously hardcoded
-values, and `confusion_study.py` reports the evolution-line confusion rate
-against its chance rate (a hardcoded Gen 1 family map, singletons excluded).
-
-**Results** (baseline `c2-resnet50-standard` = 0.653, SEM 0.013, gap +0.977;
-significance bar 2× combined SEM, pre-registered):
-
-| run | oof top-1 | SEM | delta | × SEM | top-5 | gap | per-fold |
-|---|---|---|---|---|---|---|---|
-| n1-norotate | 0.670 | 0.014 | +0.017 | +0.90 | 0.851 | +0.977 | 0.640 0.707 0.640 0.667 0.698 |
-| n1-notranslate | 0.663 | 0.009 | +0.010 | +0.63 | 0.846 | +1.021 | 0.644 0.667 0.640 0.685 0.680 |
-| *n1-baseline-seed43* | *0.662* | *0.017* | *+0.009* | *(ref. variance)* | *0.834* | *+0.967* | *0.608 0.671 0.644 0.707 0.680* |
-| *baseline* | *0.653* | *0.013* | — | — | *0.837* | *+0.977* | *0.644 0.649 0.613 0.671 0.689* |
-| n1-noscale | 0.653 | 0.015 | +0.000 | +0.01 | 0.829 | +1.037 | 0.617 0.694 0.631 0.640 0.685 |
-| n1-hflip-morph | 0.652 | 0.016 | -0.001 | -0.03 | 0.842 | +0.889 | 0.635 0.698 0.604 0.649 0.676 |
-| n1-narrowscale | 0.635 | 0.009 | -0.018 | -1.12 | 0.828 | +1.057 | 0.622 0.617 0.622 0.653 0.662 |
-
-Evolution-line confusion rate (share of top-1 errors landing inside the true
-class's evolution family; chance rate 0.9%):
-
-| run | evolution-line errors | rate | lift over chance |
-|---|---|---|---|
-| baseline | 49 / 385 | 12.7% | 15× |
-| n1-noscale | 50 / 385 | 13.0% | 15× |
-
-**The scale hypothesis is rejected.** Preserving size exactly (`n1-noscale`)
-moved neither headline accuracy (0.653 → 0.653) nor the mechanism it was
-supposed to move — evolution-line confusions are 13.0% of errors vs the
-baseline's 12.7%, identical within one error. Narrowing the jitter instead of
-removing it trends *worse* (-1.8pt, -1.12× SEM). Whatever the model does with
-the 1.35× scale jitter, the within-generation size signal it was hypothesised to
-be destroying is either not recoverable or not being used; either way it is not
-load-bearing. The ~74%-of-range arithmetic was correct and irrelevant.
-
-**Nothing clears the bar, and the reference itself moved.** The two positive
-trends (norotate +1.7pt at 0.90× SEM, notranslate +1.0pt at 0.63× SEM) sit
-inside what `n1-baseline-seed43` shows a mere seed change does to the reference
-(+0.9pt). No subtraction wins under the pre-registered rule. If anything here
-deserves a cheap second look later it is `n1-norotate` — silhouette pose is
-upright by construction, so ±20° rotation is not obviously label-preserving —
-but confirming it needs repeated CV at a second seed, not a default change on a
-0.90× SEM trend.
-
-**The C7 positives do not combine.** `n1-hflip-morph` (both trending-positive
-C7 augmentations together, on default affine) lands exactly on the baseline
-(-0.1pt). Individually +1.5 and +1.7pt, together 0.0 — consistent with both
-having been reference-run noise all along, which the seed-43 measurement makes
-concrete. It does produce the lowest gap of any run here (+0.889), continuing
-the pattern that gap and accuracy move independently.
-
-**The augmentation axis is now closed in both directions.** C7 tested additions
-(nothing helped, elastic hurt); N1 tested subtractions (nothing helped,
-narrowing scale trends worse). Ten single-factor augmentation experiments
-bracket the current recipe as locally optimal to within ~±1pt. Stop tuning it.
-
-### Verdict for N2 (pre-registered gate)
-
-Neither accuracy nor evolution-line confusions moved, so per the gate set when
-N1 was planned: **the size cue is weaker than assumed and N2 is rescoped before
-anything is written.** Concretely:
-
-- **Dropped: `n2-contour-sequence`** — it was explicitly gated on N1 showing
-  scale matters ("build only if N1 shows scale matters"). It does not.
-- **Deprioritised: `n2-proportion-branch`** — its motivating story (restore the
-  size/proportion cue the affine destroys) lost its first half. Scale-free
-  proportions were not directly tested and could still matter, but it no longer
-  gets built on this evidence.
-- **Kept: `n2-multichannel`** — its value never rested on size: the distance
-  transform encodes thickness and the medial axis, curvature encodes
-  protrusions. Still the highest value-to-effort item.
-- **Kept, upgraded: `n2-aspect-preserved-crop`** — its stated caveat was that it
-  "deliberately discards absolute size; N1 says whether that is affordable."
-  N1's answer: it is. The resolution gain comes at a cost now measured at ~zero.
-
-The evolution-line problem (12.7% of errors at 15× chance) is real but is not a
-*size* problem the augmentation was masking. The remaining N2 items attack it
-through thickness, protrusions, and resolution instead.
-
-## Phase N2 — Add information to the silhouette input
-
-**Rescoped by N1's verdict** (see above): `n2-contour-sequence` is dropped,
-`n2-proportion-branch` deprioritised; `n2-multichannel` and
-`n2-aspect-preserved-crop` are the live items, in that order.
-
-**Status: `n2-multichannel` is done** — see its results subsection below. The
-SDT channel is the most promising unconfirmed lead in the file (+1.9pt pooled
-over four paired comparisons, ~2.0× SEM, but only 0.9× on the pairing that
-matters); the curvature proxy is dead; and the phase's accidental headline is
-that **mask polarity alone is worth ~3pt**. Defaults are unchanged.
-
-The input is a binary mask replicated across three identical channels, so **two
-thirds of the input capacity is redundant**, and the only information reaching
-the network is "inside or outside". Everything here is derived from the
-silhouette alone, so all of it is deployable on an arbitrary input.
-
-- [x] **n2-multichannel** — mask, signed distance transform, boundary curvature.
-      The distance transform encodes thickness and the medial axis, i.e.
-      proportion; curvature encodes protrusions — crests, tails, spikes — which
-      is exactly where similar body plans differ. Free capacity, same
-      architecture. Highest value-to-effort here. **Done — results below.**
-- [ ] **n2-aspect-preserved-crop** — bbox-crop fitting the longer side and
-      padding the shorter, so effective resolution rises (late-generation sprites
-      currently waste most of the frame on padding) while aspect ratio survives
-      as a scale-free body-plan proxy. Note this deliberately discards absolute
-      size; N1 says whether that is affordable.
-- [ ] **n2-proportion-branch** — scale-free descriptors (aspect ratio,
-      compactness `P²/A`, extent, hole count, Hu moments, second-moment
-      elongation) through their own MLP, concatenated before the classifier.
-      **Warning:** ~10 scalars appended to a 2048-d pooled vector with 888
-      training images will be ignored. This needs comparable branch width or an
-      auxiliary loss, or the experiment will return a false negative.
-- [ ] **n2-contour-sequence** — the outline as a 1-D signal (radial distance vs
-      angle, or a turning function), encoded by a small 1-D CNN as a second
-      branch. Genuinely complementary to a 2-D CNN, and Fourier descriptors of it
-      let you choose which invariances to keep — unlike the 2-D CNN you can
-      deliberately *retain* the scale term. Build only if N1 shows scale matters.
-
-### n2-multichannel — results
-
-Implementation: `input_channels: tuple[str, str, str]` (default all `"mask"`)
-selects per-channel encodings, built by a `SilhouetteChannels` transform that
-runs after `RandomMorphology` and before `Normalize` in **both** train and eval
-branches — this is the input representation, not augmentation. `"sdt"` is a
-signed distance transform at a fixed 64px scale mapped into [0, 1] (0.5 on the
-boundary); `"curv"` is a morphological proxy (7px opening top-hat vs closing
-bottom-hat, values {0, 0.5, 1}). Everything derives from the silhouette alone,
-so it deploys on an arbitrary input. SDT runs cost ~+30% wall time (~22 min vs
-17).
-
-**The accidental headline: mask polarity is worth ~3pt.** The first
-implementation also flipped the threshold to creature = 1 (the convention the
-derived channels use internally). That inversion is information-free — a single
-affine reparameterization of the input — and it still cost ~3 points, confirmed
-by paired same-seed comparisons at two seeds:
-
-| pairing (all-mask) | background = 1 | creature = 1 | delta |
-|---|---|---|---|
-| seed 42 | 0.653 | 0.626 | −2.7pt |
-| seed 43 | 0.662 | 0.630 | −3.3pt |
-
-Pooled ~−3.0pt at ~2.3× combined SEM: **confirmed**. Polarity is now a config
-field (`invert_mask`), defaulting to the original background = 1 convention;
-the default pipeline is verified byte-identical to the pre-N2 transform. Two
-lessons: pretrained features are sensitive to representational choices that
-carry zero information (ImageNet backgrounds are not usually the bright,
-uniform, majority region), and an unmeasured implementation convenience would
-have silently poisoned every later comparison had the `n2-mask-inverted`
-control not been run.
-
-**Channel results** (five distinct configs, eight runs):
-
-| run | channels | mask polarity | seed | oof top-1 | SEM | per-fold |
-|---|---|---|---|---|---|---|
-| **n2-origmask-sdt** | mask,sdt,mask | background | 42 | **0.674** | 0.005 | 0.671 0.671 0.658 0.685 0.685 |
-| n2-origmask-sdt-seed43 | mask,sdt,mask | background | 43 | 0.666 | 0.017 | 0.631 0.662 0.667 0.730 0.640 |
-| n2-sdt | mask,sdt,mask | creature | 42 | 0.654 | 0.011 | 0.635 0.653 0.626 0.676 0.680 |
-| n2-sdt-seed43 | mask,sdt,mask | creature | 43 | 0.654 | 0.019 | — |
-| n2-sdt-curv | mask,sdt,curv | creature | 42 | 0.641 | 0.009 | 0.644 0.658 0.608 0.649 0.644 |
-| n2-curv | mask,mask,curv | creature | 42 | 0.635 | 0.011 | 0.640 0.608 0.635 0.671 0.622 |
-| n2-mask-inverted | mask ×3 | creature | 42 | 0.626 | 0.012 | 0.658 0.622 0.586 0.640 0.626 |
-| n2-mask-inverted-seed43 | mask ×3 | creature | 43 | 0.630 | 0.011 | — |
-
-**SDT: consistently positive, not confirmed.** Four independent paired
-comparisons (SDT config vs its same-seed, same-polarity all-mask reference):
-
-| polarity | seed | delta | × combined SEM |
-|---|---|---|---|
-| creature | 42 | +2.8pt | +1.75 |
-| creature | 43 | +2.4pt | +1.12 |
-| background | 42 | +2.1pt | +1.50 |
-| background | 43 | +0.4pt | +0.15 |
-
-Sign-consistent 4/4, pooled **+1.9pt at ~2.0× SEM** — but the two pairings
-that measure a *net* gain over the actual default (background polarity) pool to
-only **+1.25pt at 0.9×**, dragged down by the seed-43 replication. Per the
-pre-registered rule the default does **not** change. The mechanism moved the
-right way on the best run (errors 385 → 362; evolution-line confusions 12.7% →
-11.3% of errors) and its fold spread (SEM 0.005) is the tightest in the clean
-experiment, but the honest summary is: *the most promising unconfirmed lead in
-this file*, not a gain. Settling it costs two more paired runs (seeds 44/45,
-~45 min); the inverted-polarity pairs also suggest part of SDT's value is
-repairing representational inconvenience rather than adding information.
-
-**The curvature proxy is dead, and the diagnosis matters more than the number.**
-Alone it adds +0.9pt over its control (0.6×); combined it *dilutes* SDT (0.641
-vs 0.654). On a typical silhouette it marks ~0.3% of pixels in 1-3px slivers
-with hard ternary values — features mostly destroyed by the stem's immediate 4×
-downsample before any residual block sees them. The negative result therefore
-says "sparse spiky encodings don't survive the stem", not "curvature is
-useless". Recorded candidates for a better third channel, none yet tested:
-
-- **Level-set curvature of the EDT field** (`div(∇φ/|∇φ|)` via two
-  `numpy.gradient` calls) — dense, smooth, boundary curvature near the contour,
-  no new dependencies. The principled retry.
-- **Thick edge band** (`exp(−d²/2σ²)`, σ ≈ 8px so ~2px survive the stem) — the
-  input-side workaround for stem downsampling; mutually informative with
-  `n3-reduced-stride-stem`, which is the architecture-side fix for the same
-  mechanism. Caveat: pointwise in the SDT, so next to an SDT channel it adds
-  representational convenience only — though the polarity result is a direct
-  demonstration that convenience can be worth points.
-- **Gaussian-blurred mask** (σ ≈ 8-16px) — coarse body-plan channel; partially
-  redundant with SDT near the boundary.
-
-Explicitly **not** planned: replacing the CNN with HOG or edge-gradient features.
-On a binary silhouette gradients exist only at the boundary, so HOG reduces to a
-coarse boundary-orientation histogram — strictly less expressive than what the
-CNN already learns, and the method CNNs superseded. The CNN is not the failing
-component: 0.653 over 151 classes from bare silhouettes is a feature extractor
-doing its job, and the failure is narrow and specific.
-
-## Phase N3 — Architectures suited to binary input
-
-ResNet50 on ImageNet weights is a 3-channel natural-image model carrying colour
-and texture filters that a binary mask can never activate. Worth testing whether
-something better matched wins.
-
-- [ ] **n3-single-channel-stem** — replace `conv1` with a 1-channel stem
-      (summing or averaging the pretrained RGB filters), removing the redundant
-      channels at the source rather than filling them. Direct comparison against
-      `n2-multichannel`: fill the capacity, or drop it?
-- [ ] **n3-scratch-small** — a small CNN trained from scratch. 888 images is
-      little, but ImageNet pretraining may be buying less than assumed on
-      texture-free input, and this bounds how much it is actually worth.
-- [ ] **n3-mnist-style** — an architecture from the binary/grayscale lineage
-      (LeNet-ish, or a small ResNet with reduced stem stride). The standard
-      ImageNet stem downsamples 4× immediately, which is aggressive for thin
-      contour detail on a 224px silhouette.
-- [ ] **n3-reduced-stride-stem** — keep ResNet50 but drop the stem stride and/or
-      maxpool, preserving contour detail into the first residual stage. Cheapest
-      item here and possibly the most direct fix for thin-feature loss.
-
----
-
-# Deferred
-
-Return to these once N1-N3 settle the representation. Tuning against the current
-representation risks fitting hyperparameters to a signal we are about to change.
-
-## Phase D1 — Regularization (finish C3)
-
-Label smoothing is partially done (see C3 above). Weight decay, and batch-norm
-affine, remain. Re-run after N2, since the right amount of regularization depends
-on how much information the input carries.
-
-## Phase D2 — Learning rate and schedule
-
-Includes the two items with the strongest prior evidence:
-
-- **Cosine + warmup.** There is no LR scheduler at all — constant LR for 16
-  epochs. Implicated in the `c1-lastN4` fold divergence and the leaky-era
-  `blr=4e-4` collapse, which share a signature.
-- **Best-epoch checkpointing.** `train_outer_loop` returns the *final*-epoch
-  model and that is what gets scored; the best epoch is never restored. Free
-  accuracy, and it removes `epochs` as a tuning axis.
-- Bisect the `backbone_lr` cliff between 2e-4 and 4e-4.
-
-## Phase D3 — Optimizer
-
-Never swept; `AdamW` assumed throughout. SGD+momentum and Adam at matched tuned
-LR.
-
-## Phase D4 — Depth and backbone re-check
-
-C1's depth sweep ran on the shape-biased checkpoint, which C2 then discarded.
-Re-sweep on the current default, and re-check resnet18 vs resnet50, whose 3.5pt
-gap was 1.9× SEM — just under the bar.
-
-## Phase D5 — Inference-time gains (final phase only)
-
-**Deliberately excluded from the exploration phase**, despite the C3 diversity
-measurement suggesting a large gain is available. The reasoning is about what a
-baseline is *for*, not about whether ensembling works:
-
-- **It multiplies the cost of every experiment.** A seed ensemble at M=3 makes
-  each N1-N3 run 3× more expensive. The whole plan is a sequence of cheap
-  single-factor tests, and tripling every one of them to buy accuracy that is not
-  what those tests are measuring is a bad trade.
-- **It sets an unrealistic precedent for everything measured against it.** Once
-  the baseline is an ensemble, every subsequent architecture and representation
-  is judged as an ensemble too — on both accuracy and compute. That is not the
-  configuration any of them would ship as, and it hides whether a change helps a
-  *model* or merely adds diversity to a pool.
-- **Noise reduction is a separate tool from ensembling.** If a specific
-  comparison is too close to call, the honest fix is repeated CV or a second
-  `random_state` on that comparison — which measures the same model more
-  precisely. Ensembling changes the model instead. Conflating the two was the
-  error in the earlier version of this section.
-
-So: run it once, at the end, on whatever configuration N1-N3 and D1-D4 settle on.
-
-- **Fold ensemble** — average logits over the K fold models. K-fold already
-  trains them, so at the end it is free.
-- **Seed ensemble** — the same config at several `random_state` values.
-- **TTA** (identity + hflip + small rotations), typically +1-2pt.
-
-### The trap, when the time comes
-
-Averaging the K fold models and scoring them against `oof_predictions.json`
-**would be leakage**, and it would look like a large gain. Each image is
-out-of-fold for exactly one of the K models; the other K-1 trained on it. An
-"ensemble" over all K is therefore (K-1)/K memorisation per image —
-structurally the same mistake as the shiny duplicates, reached from the opposite
-direction.
-
-Valid evaluations are a **seed ensemble within each fold** (every prediction
-stays genuinely out-of-fold, comparable to the single-model numbers), or a
-**fold ensemble on the held-out test split**, which no fold model ever trained
-on. The latter spends D6's one-shot test set, so it belongs in the same single
-final evaluation rather than as a separate measurement.
-
-## Phase D6 — Final evaluation (once only)
-
-After a single config is chosen on cross-validation, evaluate on the
-never-touched test split exactly once and report with a binomial confidence
-interval. No tuning after this point; anything learned from it is a new
-hypothesis, not a correction.
 ---
 
 ## Known data issues
 
-- `data/bulbasaur/` contains two strays from an older processing convention,
-  `silhouette-image-1.png` and `silhouette-image-11.png`; the first is a
-  byte-identical copy of `image-1.png`. Both are excluded by the canonical
-  filename match in `_normal_sprite_indices`, but the class should be
-  regenerated.
-- `raw_data/` and `data/` disagree in count for `bulbasaur` only (14 vs 16).
-- 56 near-duplicate clusters remain within the normal sprite series —
-  consecutive generations whose art barely changed. Grouped folds keep them from
-  straddling a split; they are not otherwise removed.
+- `data/bulbasaur/` holds two strays from an older convention (excluded by the
+  canonical-filename match); the class should be regenerated.
+- 56 near-duplicate clusters remain in the normal series; grouped folds keep
+  them from straddling splits.
+- Raw sprite size is a near-perfect generation proxy (56×56 Gen 1 … 128×128
+  Gen 6+) — a shortcut to keep out of preprocessing.

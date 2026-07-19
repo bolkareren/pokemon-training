@@ -10,12 +10,8 @@ def _resolve_device(device):
 
 
 def predict_top_k(model, data_loader, k=5, device=None):
-	"""Return (top_k_predictions, labels) as lists, in data_loader order.
-
-	Kept separate from `accuracy` because the Phase 15 data study needs the
-	predictions themselves - a confusion matrix, and which classes a wrong
-	answer was confused with - not just a scalar score.
-	"""
+	"""Return (top_k_predictions, labels) as lists, in data_loader order -
+	the raw predictions the confusion study consumes."""
 	device = _resolve_device(device)
 	model.to(device)
 	model.eval()
