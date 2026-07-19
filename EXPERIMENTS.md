@@ -84,18 +84,28 @@ the contour — wide enough that ~2px survive the 4× stem downsample. It
 concentrates input contrast where all silhouette information lives, in the form
 pretrained edge-sensitive stem filters respond to.
 
-The gate resolved: SDT confirmed, so the base is `(mask, sdt, mask)`.
+The gate resolved: SDT confirmed, so the base was `(mask, sdt, mask)`.
 
-- [ ] **p1-sdt-edge** — `--input-channels mask sdt edge`. Note: edge is
-      pointwise in the SDT, so this measures representational convenience,
-      not new information — the polarity result proved that can be worth
-      points anyway.
-- [ ] **p1-edge** — `--input-channels mask edge mask`; the clean single-factor
-      test of the downsampling-workaround hypothesis, independent of SDT.
-- [ ] **p1-verdict** — if edge helps anywhere, that is direct evidence for
-      Phase 3; record the cross-reference explicitly.
+- [x] **p1-sdt-edge** — `(mask, sdt, edge)`: **0.648, −2.6pt vs the same-seed
+      default (0.674), all five paired folds negative.** The informational-
+      redundancy caveat played out — unlike polarity, this representational
+      convenience did not pay.
+- [x] **p1-edge** — `(mask, edge, mask)`: 0.660, +0.65pt vs the same-seed
+      all-mask baseline (0.653) at ~0.4× SEM, 3/5 folds. Inconclusive; edge
+      alone is not better than SDT alone (0.674).
 
-Backup third-channel candidate if edge fails: level-set curvature of the EDT
+**Verdict: the default stays `(mask, sdt, mask)`; edge is retired.** Weak
+support only for the thin-feature hypothesis from the input side — Phase 3
+remains motivated primarily by the curv diagnosis, not boosted by this.
+
+A pattern worth recording: every two-derived-channel config has lost to its
+one-derived-channel counterpart on the same folds (sdt+curv 0.641 < sdt 0.654;
+sdt+edge 0.648 < sdt 0.674). The winning config keeps **two copies of the raw
+mask**; whether the duplicate mask is load-bearing (channel-weighting under
+RGB-correlated pretrained filters) is an open, cheap-to-test hypothesis —
+e.g. `(sdt, mask, sdt)` or channel-position swaps — parked in Phase 5.
+
+Backup third-channel candidate (untested): level-set curvature of the EDT
 field (`div(∇φ/|∇φ|)` via two `numpy.gradient` calls — dense, smooth, no new
 dependencies).
 
@@ -156,6 +166,9 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
       expected value (gap is not predictive), run for completeness.
 - [ ] **single-channel stem** — sum pretrained RGB filters; "drop the
       redundant capacity" vs Phase 1's "fill it".
+- [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
+      winning `(mask, sdt, mask)` load-bearing? Channel-position swaps,
+      e.g. `(sdt, mask, sdt)`. See the Phase 1 pattern note.
 - [ ] **aspect-preserved crop** — bbox-crop + pad; resolution gain at a size
       cost N1 measured as ~zero.
 - [ ] **backbone re-check** — resnet18 vs 50 was 1.9× SEM, just under the bar.
