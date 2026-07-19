@@ -19,7 +19,8 @@ and none of its numbers are comparable to anything here.
   `fold_accuracy_sem` is the number to use). Confirm anything load-bearing with
   a second `random_state` — measured reference variance on a seed change alone
   is ~±1pt.
-- A no-flag `--folds 5` run reproduces the baseline exactly. Changing
+- A no-flag `--folds 5` run reproduces the current best config
+  (`n2-origmask-sdt`, seed 42). Changing
   `--model-name` with a checkpoint set requires `--weights-checkpoint None`
   (fails fast otherwise). `val_size` is unused in fold mode.
 - Every fold run logs `oof_predictions.json`; `scripts/confusion_study.py`
@@ -45,11 +46,13 @@ and none of its numbers are comparable to anything here.
 | does removing augmentation help? | no; nothing clears the bar, scale jitter removal moves nothing → size cue not load-bearing; augmentation closed in both directions | n1-* |
 | is the error irreducible? | no — silhouette collisions explain ~3% of errors (electrode/voltorb IoU 0.969 is the max); evolution-line confusions are 12.7% of errors at 15× chance | confusion study |
 | mask polarity? | worth ~3pt despite being information-free; background = 1 wins (confirmed, 2 paired seeds, ~2.3× SEM) | n2-mask-inverted* |
-| SDT input channel? | positive in all 4 paired comparisons (+1.9pt pooled, ~2.0× SEM) but 0.9× vs the real default; **verdict pending seeds 44/45** (in flight) | n2-*sdt* |
+| SDT input channel? | **confirmed**: +1.5pt over 4 paired seeds (+2.1/+0.4/+0.8/+2.6), 15/20 matched folds positive, t=2.86, p=0.01; now the default | n2-*sdt* |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 
-**Current best: 0.653 (the defaults), SEM 0.013.** Best unconfirmed candidate:
-`--input-channels mask sdt mask` at 0.674/0.666 over two seeds.
+**Current best: 0.677, mean over four seeds of `(mask, sdt, mask)` — now the
+config default** (0.674/0.666/0.675/0.693 at seeds 42-45; the all-mask baseline
+re-measured 0.653/0.662/0.667/0.667 on the same seeds). Per-seed pairing is the
+comparison standard: a Phase 1+ run at seed 42 compares against 0.674.
 
 What the failures collectively point at: the bottleneck is not capacity,
 regularization, data variety, or task ambiguity — it is how much discriminating
@@ -81,16 +84,14 @@ the contour — wide enough that ~2px survive the 4× stem downsample. It
 concentrates input contrast where all silhouette information lives, in the form
 pretrained edge-sensitive stem filters respond to.
 
-Gated on the seeds-44/45 SDT verdict (runs in flight):
+The gate resolved: SDT confirmed, so the base is `(mask, sdt, mask)`.
 
-- If SDT confirms → base is `(mask, sdt, mask)`:
-  - [ ] **p1-sdt-edge** — `--input-channels mask sdt edge`. Note: edge is
-        pointwise in the SDT, so this measures representational convenience,
-        not new information — the polarity result proved that can be worth
-        points anyway.
-- Either way:
-  - [ ] **p1-edge** — `--input-channels mask edge mask` on the default base;
-        the clean single-factor test of the downsampling-workaround hypothesis.
+- [ ] **p1-sdt-edge** — `--input-channels mask sdt edge`. Note: edge is
+      pointwise in the SDT, so this measures representational convenience,
+      not new information — the polarity result proved that can be worth
+      points anyway.
+- [ ] **p1-edge** — `--input-channels mask edge mask`; the clean single-factor
+      test of the downsampling-workaround hypothesis, independent of SDT.
 - [ ] **p1-verdict** — if edge helps anywhere, that is direct evidence for
       Phase 3; record the cross-reference explicitly.
 
@@ -181,8 +182,6 @@ on the settled config:
 
 ## Known data issues
 
-- `data/bulbasaur/` holds two strays from an older convention (excluded by the
-  canonical-filename match); the class should be regenerated.
 - 56 near-duplicate clusters remain in the normal series; grouped folds keep
   them from straddling splits.
 - Raw sprite size is a near-perfect generation proxy (56×56 Gen 1 … 128×128

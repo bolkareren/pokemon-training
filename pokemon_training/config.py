@@ -40,7 +40,9 @@ class ExperimentConfig:
 	# Per-channel input encoding, applied at train and eval alike:
 	# "mask" (binary silhouette), "sdt" (signed distance transform),
 	# "curv" (morphological curvature proxy), "edge" (thick boundary band).
-	input_channels: tuple[str, str, str] = ("mask", "mask", "mask")
+	# SDT confirmed over four paired seeds (+1.5pt, p=0.01 on 20 matched
+	# folds); all-mask was the pre-N2 default. See EXPERIMENTS.md.
+	input_channels: tuple[str, str, str] = ("mask", "sdt", "mask")
 	# Polarity of emitted "mask" channels: False = background 1 (the measured
 	# winner); derived channels always treat the creature as inside.
 	invert_mask: bool = False
