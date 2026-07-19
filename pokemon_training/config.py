@@ -57,6 +57,11 @@ class ExperimentConfig:
 	# ImageNet weights beat the shape-biased checkpoint (C2).
 	weights_checkpoint: Path | None = None
 	train_last_n_layers: int = 3
+	# Stem geometry: "default", "nomaxpool" (drop the stem maxpool; layer1 sees
+	# 112x112, ~2x compute), or "stride1" (conv1 stride 1, maxpool kept - full-
+	# resolution first conv, same layer1 size as nomaxpool). Kernels are
+	# stride-agnostic, so pretrained weights load unchanged. See Phase 3.
+	stem: str = "default"
 	train_batch_norm_affine: bool = False
 	# Must stay "train" - "eval" costs ~10pt of accuracy.
 	batch_norm_mode: str = "train"
