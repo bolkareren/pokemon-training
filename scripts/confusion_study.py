@@ -32,6 +32,69 @@ TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
 EXPERIMENT = "pokemon-classification-clean"
 NORMALIZED_SIZE = 64
 
+# Gen 1 evolution lines with two or more members among the 151 classes; every
+# class not listed is its own family. Slugs match the data/ directory names.
+# Cross-generation relatives outside Gen 1 (e.g. Onix->Steelix) do not count,
+# and Hitmonlee/Hitmonchan are unrelated within Gen 1 (Tyrogue is Gen 2).
+# Eevee's three branches share one family: same rationale as a linear line -
+# shared body plan, differing detail.
+EVOLUTION_FAMILIES = [
+    ("bulbasaur", "ivysaur", "venusaur"),
+    ("charmander", "charmeleon", "charizard"),
+    ("squirtle", "wartortle", "blastoise"),
+    ("caterpie", "metapod", "butterfree"),
+    ("weedle", "kakuna", "beedrill"),
+    ("pidgey", "pidgeotto", "pidgeot"),
+    ("rattata", "raticate"),
+    ("spearow", "fearow"),
+    ("ekans", "arbok"),
+    ("pikachu", "raichu"),
+    ("sandshrew", "sandslash"),
+    ("nidoran-f", "nidorina", "nidoqueen"),
+    ("nidoran-m", "nidorino", "nidoking"),
+    ("clefairy", "clefable"),
+    ("vulpix", "ninetales"),
+    ("jigglypuff", "wigglytuff"),
+    ("zubat", "golbat"),
+    ("oddish", "gloom", "vileplume"),
+    ("paras", "parasect"),
+    ("venonat", "venomoth"),
+    ("diglett", "dugtrio"),
+    ("meowth", "persian"),
+    ("psyduck", "golduck"),
+    ("mankey", "primeape"),
+    ("growlithe", "arcanine"),
+    ("poliwag", "poliwhirl", "poliwrath"),
+    ("abra", "kadabra", "alakazam"),
+    ("machop", "machoke", "machamp"),
+    ("bellsprout", "weepinbell", "victreebel"),
+    ("tentacool", "tentacruel"),
+    ("geodude", "graveler", "golem"),
+    ("ponyta", "rapidash"),
+    ("slowpoke", "slowbro"),
+    ("magnemite", "magneton"),
+    ("doduo", "dodrio"),
+    ("seel", "dewgong"),
+    ("grimer", "muk"),
+    ("shellder", "cloyster"),
+    ("gastly", "haunter", "gengar"),
+    ("drowzee", "hypno"),
+    ("krabby", "kingler"),
+    ("voltorb", "electrode"),
+    ("exeggcute", "exeggutor"),
+    ("cubone", "marowak"),
+    ("koffing", "weezing"),
+    ("rhyhorn", "rhydon"),
+    ("horsea", "seadra"),
+    ("goldeen", "seaking"),
+    ("staryu", "starmie"),
+    ("magikarp", "gyarados"),
+    ("eevee", "vaporeon", "jolteon", "flareon"),
+    ("omanyte", "omastar"),
+    ("kabuto", "kabutops"),
+    ("dratini", "dragonair", "dragonite"),
+]
+
 
 def normalized_silhouette(path, size=NORMALIZED_SIZE):
     """Bbox-crop the creature, then resize to a fixed square: shape without scale."""
@@ -92,6 +155,52 @@ def class_similarity(dataset, classes):
             similarity[a, b] = similarity[b, a] = best
 
     return similarity
+
+
+def family_by_class(classes):
+    """Map class index -> family id, failing loudly on any slug mismatch.
+
+    Unlisted classes each get their own singleton family, so a within-family
+    confusion is only ever counted between listed evolution-line members.
+    """
+    listed = [slug for family in EVOLUTION_FAMILIES for slug in family]
+    duplicated = {slug for slug in listed if listed.count(slug) > 1}
+    if duplicated:
+        raise SystemExit(f"slugs in more than one family: {sorted(duplicated)}")
+    unknown = set(listed) - set(classes)
+    if unknown:
+        raise SystemExit(f"family slugs not in dataset classes: {sorted(unknown)}")
+
+    family_of_slug = {
+        slug: family_id for family_id, family in enumerate(EVOLUTION_FAMILIES) for slug in family
+    }
+    return {
+        index: family_of_slug.get(slug, len(EVOLUTION_FAMILIES) + index)
+        for index, slug in enumerate(classes)
+    }
+
+
+def report_evolution_line_confusions(errors, classes, top_pairs):
+    """The Phase N1 mechanism metric: how much error is within an evolution line?
+
+    Reported next to its chance rate - the probability that a uniformly random
+    *wrong* prediction lands in the true class's family - so runs of different
+    accuracy stay comparable on this axis.
+    """
+    family = family_by_class(classes)
+    within = [e for e in errors if family[e["label"]] == family[e["top5"][0]]]
+
+    family_size = Counter(family.values())
+    chance = np.mean(
+        [(family_size[family[e["label"]]] - 1) / (len(classes) - 1) for e in errors]
+    )
+
+    rate = len(within) / len(errors)
+    print(f"\nevolution-line confusions: {len(within)} / {len(errors)} errors "
+          f"({rate:.1%}, chance {chance:.1%}, lift {rate / chance:.0f}x)")
+    counts = Counter((e["label"], e["top5"][0]) for e in within)
+    for (true, pred), count in counts.most_common(top_pairs):
+        print(f"  {count:>3}x  {classes[true]:>14} -> {classes[pred]}")
 
 
 def main():
@@ -165,6 +274,8 @@ def main():
     for (true, pred), count in counts.most_common(args.top_pairs):
         sim = similarity[true][pred]
         print(f"  {count:>3}x  {classes[true]:>14} -> {classes[pred]:<14} IoU {sim:.3f}")
+
+    report_evolution_line_confusions(errors, classes, args.top_pairs)
 
     # Does high similarity predict "right answer demoted to top-3/5" rather than lost?
     recovered_sim = np.array([similarity[e["label"]][e["top5"][0]] for e in in_top5])

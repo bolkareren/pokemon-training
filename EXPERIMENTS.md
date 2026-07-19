@@ -668,6 +668,7 @@ per-image rotation alignment) before concluding the shape hypothesis is dead.
 | C7 | does augmentation help? | no; elastic actively hurts (−4.9pt, 2.1× SEM) | no gain |
 | C9 | is the error irreducible? | no — shape collisions explain ~3% of errors, not most | ceiling is not the limit |
 | C3 (partial) | is label smoothing hurting top-1? | no — removing it costs 3.5pt | hypothesis wrong |
+| N1 | is the affine destroying the size cue? | no — removing scale jitter moves neither accuracy nor evolution-line confusions | no gain; N2 rescoped |
 
 **One real gain in the entire investigation: +5.7pt, from dropping the
 shape-biased checkpoint.** Everything else either did nothing or was a
@@ -728,12 +729,13 @@ Renumbered N1-N3 by execution order. Completed phases keep their original C
 numbers so earlier commits still resolve. Everything previously numbered C10-C12
 is superseded by what follows.
 
-**Next session starts at N1.** Every phase here is measured as a **single model
+**Next session starts at N2, as rescoped by N1's verdict below.** Every phase
+here is measured as a **single model
 under 5-fold grouped CV**, which is the protocol every earlier result used and
 the only one that keeps comparisons honest — see the note under D5 on why
 ensembling is deliberately excluded from the exploration phase.
 
-## Phase N1 — Settle augmentation, including removing what hurts
+## Phase N1 — Settle augmentation, including removing what hurts (done)
 
 C7 tested additions. This phase tests **subtraction**, which C7 never did, and
 which the scale finding makes urgent.
@@ -750,19 +752,104 @@ theory: if narrowing the scale augmentation moves evolution-line confusions, the
 proportion work in N2 is worth building. If it does nothing, the size cue is
 weaker than assumed and N2 should be rescoped before any of it is written.
 
-- [ ] **n1-noscale** — `scale=(1.0, 1.0)`, size preserved exactly
-- [ ] **n1-narrowscale** — `scale=(0.95, 1.05)`
-- [ ] **n1-norotate** — `degrees=0`; rotation may also be destroying pose cues
-- [ ] **n1-notranslate** — `translate=(0.0, 0.0)`
-- [ ] **n1-hflip-morph** — the two C7 augmentations that trended positive,
-      combined, on top of whichever subtraction wins
-- [ ] **n1-rerun-confusion-study** — evolution-line confusion rate, not just
+- [x] **n1-noscale** — `scale=(1.0, 1.0)`, size preserved exactly
+- [x] **n1-narrowscale** — `scale=(0.95, 1.05)`
+- [x] **n1-norotate** — `degrees=0`; rotation may also be destroying pose cues
+- [x] **n1-notranslate** — `translate=(0.0, 0.0)`
+- [x] **n1-baseline-seed43** — the defaults at `--random-state 43`; C7's
+      recommended reference-variance check, since every delta here is measured
+      against a single reference run
+- [x] **n1-hflip-morph** — the two C7 augmentations that trended positive,
+      combined. Pre-registered rule: stack on the winning subtraction, or on the
+      default affine if nothing wins. Nothing won, so this ran on the defaults —
+      a pure test of whether the C7 positives combine.
+- [x] **n1-rerun-confusion-study** — evolution-line confusion rate, not just
       headline accuracy. That is the mechanism being tested.
 
-Requires making the affine parameters configurable; they are currently hardcoded
-in `get_transforms`.
+The affine is now configurable (`--affine-degrees`, `--affine-translate`,
+`--affine-scale MIN MAX`), with defaults reproducing the previously hardcoded
+values, and `confusion_study.py` reports the evolution-line confusion rate
+against its chance rate (a hardcoded Gen 1 family map, singletons excluded).
+
+**Results** (baseline `c2-resnet50-standard` = 0.653, SEM 0.013, gap +0.977;
+significance bar 2× combined SEM, pre-registered):
+
+| run | oof top-1 | SEM | delta | × SEM | top-5 | gap | per-fold |
+|---|---|---|---|---|---|---|---|
+| n1-norotate | 0.670 | 0.014 | +0.017 | +0.90 | 0.851 | +0.977 | 0.640 0.707 0.640 0.667 0.698 |
+| n1-notranslate | 0.663 | 0.009 | +0.010 | +0.63 | 0.846 | +1.021 | 0.644 0.667 0.640 0.685 0.680 |
+| *n1-baseline-seed43* | *0.662* | *0.017* | *+0.009* | *(ref. variance)* | *0.834* | *+0.967* | *0.608 0.671 0.644 0.707 0.680* |
+| *baseline* | *0.653* | *0.013* | — | — | *0.837* | *+0.977* | *0.644 0.649 0.613 0.671 0.689* |
+| n1-noscale | 0.653 | 0.015 | +0.000 | +0.01 | 0.829 | +1.037 | 0.617 0.694 0.631 0.640 0.685 |
+| n1-hflip-morph | 0.652 | 0.016 | -0.001 | -0.03 | 0.842 | +0.889 | 0.635 0.698 0.604 0.649 0.676 |
+| n1-narrowscale | 0.635 | 0.009 | -0.018 | -1.12 | 0.828 | +1.057 | 0.622 0.617 0.622 0.653 0.662 |
+
+Evolution-line confusion rate (share of top-1 errors landing inside the true
+class's evolution family; chance rate 0.9%):
+
+| run | evolution-line errors | rate | lift over chance |
+|---|---|---|---|
+| baseline | 49 / 385 | 12.7% | 15× |
+| n1-noscale | 50 / 385 | 13.0% | 15× |
+
+**The scale hypothesis is rejected.** Preserving size exactly (`n1-noscale`)
+moved neither headline accuracy (0.653 → 0.653) nor the mechanism it was
+supposed to move — evolution-line confusions are 13.0% of errors vs the
+baseline's 12.7%, identical within one error. Narrowing the jitter instead of
+removing it trends *worse* (-1.8pt, -1.12× SEM). Whatever the model does with
+the 1.35× scale jitter, the within-generation size signal it was hypothesised to
+be destroying is either not recoverable or not being used; either way it is not
+load-bearing. The ~74%-of-range arithmetic was correct and irrelevant.
+
+**Nothing clears the bar, and the reference itself moved.** The two positive
+trends (norotate +1.7pt at 0.90× SEM, notranslate +1.0pt at 0.63× SEM) sit
+inside what `n1-baseline-seed43` shows a mere seed change does to the reference
+(+0.9pt). No subtraction wins under the pre-registered rule. If anything here
+deserves a cheap second look later it is `n1-norotate` — silhouette pose is
+upright by construction, so ±20° rotation is not obviously label-preserving —
+but confirming it needs repeated CV at a second seed, not a default change on a
+0.90× SEM trend.
+
+**The C7 positives do not combine.** `n1-hflip-morph` (both trending-positive
+C7 augmentations together, on default affine) lands exactly on the baseline
+(-0.1pt). Individually +1.5 and +1.7pt, together 0.0 — consistent with both
+having been reference-run noise all along, which the seed-43 measurement makes
+concrete. It does produce the lowest gap of any run here (+0.889), continuing
+the pattern that gap and accuracy move independently.
+
+**The augmentation axis is now closed in both directions.** C7 tested additions
+(nothing helped, elastic hurt); N1 tested subtractions (nothing helped,
+narrowing scale trends worse). Ten single-factor augmentation experiments
+bracket the current recipe as locally optimal to within ~±1pt. Stop tuning it.
+
+### Verdict for N2 (pre-registered gate)
+
+Neither accuracy nor evolution-line confusions moved, so per the gate set when
+N1 was planned: **the size cue is weaker than assumed and N2 is rescoped before
+anything is written.** Concretely:
+
+- **Dropped: `n2-contour-sequence`** — it was explicitly gated on N1 showing
+  scale matters ("build only if N1 shows scale matters"). It does not.
+- **Deprioritised: `n2-proportion-branch`** — its motivating story (restore the
+  size/proportion cue the affine destroys) lost its first half. Scale-free
+  proportions were not directly tested and could still matter, but it no longer
+  gets built on this evidence.
+- **Kept: `n2-multichannel`** — its value never rested on size: the distance
+  transform encodes thickness and the medial axis, curvature encodes
+  protrusions. Still the highest value-to-effort item.
+- **Kept, upgraded: `n2-aspect-preserved-crop`** — its stated caveat was that it
+  "deliberately discards absolute size; N1 says whether that is affordable."
+  N1's answer: it is. The resolution gain comes at a cost now measured at ~zero.
+
+The evolution-line problem (12.7% of errors at 15× chance) is real but is not a
+*size* problem the augmentation was masking. The remaining N2 items attack it
+through thickness, protrusions, and resolution instead.
 
 ## Phase N2 — Add information to the silhouette input
+
+**Rescoped by N1's verdict** (see above): `n2-contour-sequence` is dropped,
+`n2-proportion-branch` deprioritised; `n2-multichannel` and
+`n2-aspect-preserved-crop` are the live items, in that order.
 
 The input is a binary mask replicated across three identical channels, so **two
 thirds of the input capacity is redundant**, and the only information reaching

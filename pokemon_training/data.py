@@ -68,6 +68,9 @@ def get_transforms(
     morphological=False,
     resolution_jitter=False,
     elastic=False,
+    affine_degrees=20.0,
+    affine_translate=0.2,
+    affine_scale=(0.85, 1.15),
 ):
     """Build (train, eval) transforms. Each augmentation is independently togglable.
 
@@ -83,9 +86,9 @@ def get_transforms(
 
     geometric.append(
         transforms.RandomAffine(
-            degrees=20,
-            translate=(0.2, 0.2),
-            scale=(0.85, 1.15),
+            degrees=affine_degrees,
+            translate=(affine_translate, affine_translate),
+            scale=tuple(affine_scale),
         )
     )
 

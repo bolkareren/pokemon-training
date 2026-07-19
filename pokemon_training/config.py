@@ -14,9 +14,8 @@ class ExperimentConfig:
     # Data
     data_dir: Path | None = None  # defaults to <project_root>/data when unset
     batch_size: int = 16
-    # 0.15, not 0.1: with shiny sprites excluded the dataset is 1307 images over
-    # 151 classes, and a 10% split (131) is smaller than the class count, which
-    # makes a stratified split impossible. See EXPERIMENTS.md Phase 12.
+    # 0.15: with shiny sprites excluded the dataset is 1307 images over
+    # 151 classes, See EXPERIMENTS.md Phase 12.
     val_size: float = 0.15
     test_size: float = 0.15
     # Drop shiny sprites, which are recolours of the normal sprites and so have
@@ -45,6 +44,16 @@ class ExperimentConfig:
     augment_resolution_jitter: bool = False
     # Mild elastic warp - a pose change is roughly an elastic deformation.
     augment_elastic: bool = False
+
+    # The always-on RandomAffine. Defaults reproduce the values that were
+    # hardcoded through C0-C7. Phase N1 subtracted each component and nothing
+    # cleared 2x SEM; notably, removing the scale jitter moved neither accuracy
+    # nor evolution-line confusions, so the size-cue hypothesis is rejected and
+    # these defaults stand as measured-local-optimal. See EXPERIMENTS.md N1.
+    affine_degrees: float = 20.0
+    # Symmetric max translation fraction, applied as (t, t).
+    affine_translate: float = 0.2
+    affine_scale: tuple[float, float] = (0.85, 1.15)
 
     # Single global seed for the run: the stratified split, all RNGs
     # (random/numpy/torch/cuda/mps), and the train DataLoader shuffle.
@@ -93,11 +102,14 @@ class ExperimentConfig:
     save_model: bool = False
 
     @property
-    def augmentations(self) -> dict[str, bool]:
+    def augmentations(self) -> dict[str, bool | float | tuple[float, float]]:
         """Augmentation flags in the form `get_transforms` expects."""
         return {
             "hflip": self.augment_hflip,
             "morphological": self.augment_morphological,
             "resolution_jitter": self.augment_resolution_jitter,
             "elastic": self.augment_elastic,
+            "affine_degrees": self.affine_degrees,
+            "affine_translate": self.affine_translate,
+            "affine_scale": self.affine_scale,
         }

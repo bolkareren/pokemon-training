@@ -12,7 +12,9 @@ torchvision backbone (ResNet-18/34/50).
 **Current state: 0.653 out-of-fold accuracy**, single model under 5-fold grouped
 CV over 1110 images. Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
 interpreting any experiment — particularly "Results so far" and "Noise floor".
-The active plan resumes at **Phase N1**.
+The active plan resumes at **Phase N2, as rescoped by N1** (N1 rejected the
+scale-cue hypothesis: `n2-multichannel` and `n2-aspect-preserved-crop` are the
+live items; `n2-contour-sequence` is dropped).
 
 ## Commands
 
@@ -139,11 +141,16 @@ Measured, and load-bearing for the current plan:
   range), while within a generation bigger Pokémon really are drawn bigger (1.83×
   spread; size rises along the evolution line in 95% of cases). Same magnitude,
   so they cancel.
-- **The always-on `RandomAffine` includes `scale=(0.85, 1.15)`**, which randomises
-  away ~74% of that size range — i.e. actively trains away the cue that separates
-  Pidgey from Pidgeot. Phase N1 tests removing it.
+- **The always-on `RandomAffine` is configurable** (`affine_degrees`,
+  `affine_translate`, `affine_scale`) and its defaults are measured-local-optimal:
+  N1 subtracted each component and nothing cleared 2× SEM. Removing the scale
+  jitter — hypothesised to be destroying the Pidgey-vs-Pidgeot size cue — moved
+  neither accuracy nor evolution-line confusions. The size cue is not load-bearing.
 - **The 3 input channels hold identical copies of the same binary mask**, so two
   thirds of input capacity is redundant. Phase N2 fills it.
+- **Evolution-line confusions are 12.7% of all top-1 errors** at a 0.9% chance
+  rate (15× lift; `confusion_study.py` reports this per run) — real and
+  concentrated, but N1 showed it is not a size-cue problem.
 - **Silhouette collisions are rare**: 3 of 11,325 class pairs exceed IoU 0.90
   (electrode/voltorb is the most similar at 0.969). They explain ~3% of errors,
   so the ceiling is not the binding constraint.
