@@ -47,8 +47,9 @@ There is no test suite yet.
 - [pokemon_training/model.py](pokemon_training/model.py) — backbone loading,
   partial freezing, optimizer with split backbone/classifier LRs.
 - [pokemon_training/train.py](pokemon_training/train.py) /
-  [evaluation.py](pokemon_training/evaluation.py) — epoch loop, top-k metrics,
-  `predict_top_k`. Device: cuda → mps → cpu.
+  [evaluation.py](pokemon_training/evaluation.py) — epoch loop, per-step
+  cosine+warmup scheduler, best-epoch (val_loss) restoration, top-k metrics.
+  Device: cuda → mps → cpu.
 - [scripts/training.py](scripts/training.py) — entrypoint; wires config → data
   → model → MLflow. Fold runs log `oof_predictions.json`, the confusion
   study's input.

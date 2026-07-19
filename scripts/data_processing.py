@@ -8,14 +8,14 @@ from torchvision.transforms import InterpolationMode, Resize
 if not os.path.exists("data"):
 	os.makedirs("data")
 
-# Resize images to 224x224 and save to cleaned_dataset
-for folder in os.listdir("dataset"):
+# Resize images to 224x224 and save to data/
+for folder in os.listdir("raw_data"):
 	if not os.path.exists(f"data/{folder}"):
 		os.makedirs(f"data/{folder}")
-	for img in os.listdir(f"dataset/{folder}"):
+	for img in os.listdir(f"raw_data/{folder}"):
 		if img.endswith(".png") or img.endswith(".jpg"):
 			try:
-				image = Image.open(f"dataset/{folder}/{img}")
+				image = Image.open(f"raw_data/{folder}/{img}")
 				transform = Resize((224, 224), interpolation=InterpolationMode.NEAREST)
 				image = transform(image)
 				image.save(f"data/{folder}/{img}")

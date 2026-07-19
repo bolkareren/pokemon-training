@@ -17,8 +17,8 @@ for img in (
 	alt_name = img.attrs["src"].split("/")[-1].split(".")[0].lower()
 
 	# Create directory for each Pokémon if it doesn't exist
-	if not os.path.exists("dataset/" + alt_name):
-		os.makedirs("dataset/" + alt_name, exist_ok=True)
+	if not os.path.exists("raw_data/" + alt_name):
+		os.makedirs("raw_data/" + alt_name, exist_ok=True)
 
 		# Fetch the individual Pokémon page to get more images
 		time.sleep(2)
@@ -33,7 +33,7 @@ for img in (
 			response = requests.get(img.attrs["src"])
 			if response.status_code == 200:
 				try:
-					with open(f"dataset/{alt_name}/image-{count}.png", "wb") as f:
+					with open(f"raw_data/{alt_name}/image-{count}.png", "wb") as f:
 						count += 1
 						f.write(response.content)
 				except Exception as e:

@@ -63,6 +63,14 @@ regularization, data variety, or task ambiguity — it is how much discriminatin
 information reaches (and survives) the network. That is what the roadmap
 attacks: input representation first, then the stem that downsamples it away.
 
+A pattern across the confirmed gains: **every one so far is model-agnostic
+tooling** — data hygiene (dedup/grouped CV), pretrained-weight origin, input
+encoding and polarity, LR schedule and horizon. None required touching the
+architecture, and all of them transfer to whatever backbone eventually wins.
+The remaining roadmap is where that stops: Phases 3-4 are the first
+model-*specific* interventions, which is also why they were sequenced after
+the agnostic levers were exhausted.
+
 Also measured, and load-bearing:
 
 - **Models are high-variance**: five ~equal configs agree on only 75-82% of
@@ -154,10 +162,13 @@ longer horizons (64).
 
 ## Phase 3 — Reduced-stride stem
 
-The architecture-side fix for the same mechanism Phase 1 works around: the
+The architecture-side fix for the same mechanism Phase 1 worked around: the
 ImageNet stem (stride-2 conv + stride-2 maxpool) discards thin contour detail
 before the first residual block. Keep ResNet50 + ImageNet weights; surgery only
-where our input provably differs from natural images.
+where our input provably differs from natural images. Phase 2's warmup landing
+first matters here: stem changes shift early-layer statistics, and constant-LR
+training near the instability boundary would have confounded the comparison.
+Compute note: larger early feature maps multiply the now-40-min default run.
 
 - [ ] **p3-nomaxpool** — drop the stem maxpool (cheapest; 2× feature maps).
 - [ ] **p3-stride1-conv** — also conv1 stride 1 if compute allows (4× maps).
