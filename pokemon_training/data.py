@@ -249,49 +249,68 @@ def _normal_sprite_indices(dataset):
 	return np.array(keep)
 
 
-def near_duplicate_groups(dataset, indices, iou_threshold=0.97):
-	"""Cluster near-identical silhouettes within a class (single-linkage IoU).
-	Cross-class pairs are never grouped: a shared shape there is task difficulty,
-	not redundancy."""
-	def load_binary_mask(path):
-		with Image.open(path) as image:
-			return np.array(image.convert("L")) > 127
+def sprite_groups(dataset, indices):
+	"""Group each shiny sprite with the normal sprite it recolours.
 
+	Sprites are numbered per class as `image-<n>.png`. `image-0` is the gen-1
+	sprite, which predates shinies, so the shiny run - starting at the class
+	boundary in shiny_index.json - pairs with the normal series from `image-1`
+	onward: `normal = shiny - shiny_start + 1`. That rule resolves all 853
+	shiny sprites with no leftovers.
+
+	Pairing by index rather than by silhouette overlap is exact, and overlap
+	provably cannot do the job. The gen-5 sprites (`image-5`, and `image-6` for
+	three classes) are animated, so a shiny screenshot can catch a different
+	animation frame than its normal counterpart: golbat's wings open vs closed
+	lands at IoU 0.24, while a static pokemon like ninetales lands at 0.997.
+	Those two populations are interleaved by pose rather than separated, so no
+	threshold splits recolours from genuinely distinct artwork - 148 of the 853
+	pairs escape any usable cutoff.
+
+	Cross-class pairs are never grouped: a shared shape there is task
+	difficulty, not redundancy.
+	"""
+	if not SHINY_MANIFEST_PATH.exists():
+		raise FileNotFoundError(
+			f"{SHINY_MANIFEST_PATH} not found - grouped folds pair shiny sprites "
+			"with the normals they recolour and cannot be built without it. "
+			"Generate it with `uv run python scripts/generate_shiny_manifest.py`, "
+			"or set group_aware_folds=False."
+		)
+
+	shiny_start = json.loads(SHINY_MANIFEST_PATH.read_text())
 	targets = np.array(dataset.targets)
-	silhouettes = {i: load_binary_mask(dataset.samples[i][0]) for i in indices}
 
 	groups = np.empty(len(indices), dtype=int)
-	next_group = 0
+	group_ids = {}
 
-	for label in np.unique(targets[indices]):
-		members = [(position, i) for position, i in enumerate(indices) if targets[i] == label]
+	for position, i in enumerate(indices):
+		class_name = dataset.classes[targets[i]]
+		match = re.fullmatch(r"image-(\d+)\.png", Path(dataset.samples[i][0]).name)
+		if match is None:
+			# Stray file from an older naming convention: give it its own group
+			# rather than silently pairing it with an unrelated sprite.
+			key = (class_name, "unmatched", i)
+		else:
+			number = int(match.group(1))
+			start = shiny_start[class_name]
+			if number >= start:
+				number = number - start + 1
+			key = (class_name, number)
 
-		representatives = []  # (group_id, silhouette) per cluster
-		for position, i in members:
-			silhouette = silhouettes[i]
-			match = None
-			for group_id, representative in representatives:
-				union = (silhouette | representative).sum()
-				if union and (silhouette & representative).sum() / union > iou_threshold:
-					match = group_id
-					break
-
-			if match is None:
-				match = next_group
-				next_group += 1
-				representatives.append((match, silhouette))
-
-			groups[position] = match
+		if key not in group_ids:
+			group_ids[key] = len(group_ids)
+		groups[position] = group_ids[key]
 
 	return groups
 
 
 def fold_indices(dataset, indices, folds, random_state=42, group_aware=True):
-	"""Yield (train_idx, val_idx) per fold, stratified by class and grouped so
-	near-duplicate clusters never straddle a fold."""
+	"""Yield (train_idx, val_idx) per fold, stratified by class and grouped so a
+	shiny sprite never lands in a different fold from the normal it recolours."""
 	indices = np.asarray(indices)
 	targets = np.array(dataset.targets)[indices]
-	groups = near_duplicate_groups(dataset, indices) if group_aware else np.arange(len(indices))
+	groups = sprite_groups(dataset, indices) if group_aware else np.arange(len(indices))
 
 	splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=random_state)
 	for train_positions, val_positions in splitter.split(indices, targets, groups):

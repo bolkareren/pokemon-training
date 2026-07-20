@@ -15,10 +15,10 @@ for folder in os.listdir("raw_data"):
 	for img in os.listdir(f"raw_data/{folder}"):
 		if img.endswith(".png") or img.endswith(".jpg"):
 			try:
-				image = Image.open(f"raw_data/{folder}/{img}")
 				transform = Resize((224, 224), interpolation=InterpolationMode.NEAREST)
-				image = transform(image)
-				image.save(f"data/{folder}/{img}")
+				with Image.open(f"raw_data/{folder}/{img}") as image:
+					image = transform(image)
+					image.save(f"data/{folder}/{img}")
 			except Exception as e:
 				print(f"Error processing {img} in {folder}: {e}")
 
