@@ -293,8 +293,8 @@ def sprite_groups(dataset, indices):
 			key = (class_name, "unmatched", i)
 		else:
 			number = int(match.group(1))
-			start = shiny_start.get(class_name)
-			if start is not None and number >= start:
+			start = shiny_start[class_name]
+			if number >= start:
 				number = number - start + 1
 			key = (class_name, number)
 
