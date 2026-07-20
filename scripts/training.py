@@ -79,6 +79,7 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 		random_state=config.random_state,
 		exclude_shiny=config.exclude_shiny,
 		group_aware=config.group_aware_folds,
+		include_pose_variants=config.include_pose_variants,
 		augmentations=config.augmentations,
 	)
 	num_classes = len(classes)
