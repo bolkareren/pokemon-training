@@ -383,7 +383,8 @@ on the settled config:
 
 - **The normal series is essentially duplicate-free: 1306 clusters over 1307
   images — one genuine near-duplicate pair.** The previously recorded "56
--  clusters" was an artifact of a polarity bug in the old IoU-based grouping code (formerly `near_duplicate_groups`), which
+  clusters" was an artifact of a polarity bug in the old IoU-based grouping
+  code (`near_duplicate_groups`, since replaced by `sprite_groups`), which
   computed IoU over the *background* rather than the creature. Background IoU is
   inflated by the empty-canvas fraction, and body occupancy ranges 7.2%
   (magnemite) to 48.5% (venusaur), mean 24.9% — so the 0.97 threshold was
