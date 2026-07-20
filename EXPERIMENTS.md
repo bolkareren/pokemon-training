@@ -7,6 +7,25 @@ compared on `fold_accuracy_sem`**. Full per-phase logs live in git history;
 the pre-dedup era is summarized in [LEAKY-EXPERIMENTS.md](LEAKY-EXPERIMENTS.md)
 and none of its numbers are comparable to anything here.
 
+> **Fold correction, 2026-07-20 — read before comparing anything to an older
+> number.** Two bugs in fold construction were fixed in one session, and both
+> changed which images land in which fold:
+>
+> 1. **Mask polarity** in the near-duplicate grouping (IoU measured over the
+>    background, not the creature). Worth **+3.4pt** on the *same config*:
+>    `p2-blr4e4-32` scored 0.725 pre-fix and 0.7586 post-fix.
+> 2. **IoU grouping replaced by index-based pairing** of shiny sprites to the
+>    normals they recolour. Only ~21% of images land in the same fold under the
+>    two schemes — barely above the 20% chance floor for 5 folds — so *any*
+>    reference measured under the old grouping is unusable for pairing.
+>
+> Consequently: **every absolute number recorded before 2026-07-20 is on
+> distorted folds and understates the config by roughly 3-4pt.** Paired deltas
+> mostly survive, but two "confirmed" results have already weakened on
+> corrected folds (mask polarity, the 32-epoch horizon), so any effect *smaller
+> than the 3.4pt artifact* should be treated as unverified until re-measured.
+> Rows below carry a ⚠ where this applies.
+
 ## Protocol
 
 - Every run: `uv run python scripts/training.py --run-name <name> --folds 5 ...`
@@ -19,6 +38,20 @@ and none of its numbers are comparable to anything here.
   `fold_accuracy_sem` is the number to use). Confirm anything load-bearing with
   a second `random_state` — measured reference variance on a seed change alone
   is ~±1pt.
+  - `fold_accuracy_sem` is `fold_accuracy_stdev / sqrt(5)`, and the `sqrt(n)`
+    assumes the folds are independent. They are not: any two folds share ~3/4
+    of their training data, so the models and their errors are correlated, the
+    cross-covariance terms are positive, and **the logged SEM understates true
+    uncertainty by an unknown amount**. There is no unbiased estimator of
+    K-fold CV variance (Bengio & Grandvalet 2004), so this is not fixable in
+    code — it means the 2× bar is more permissive than it looks and borderline
+    results are weaker than their ratio suggests. It is also why the
+    second-seed requirement does real work that more folds would not: reseeding
+    gives a genuinely independent draw.
+  - Prefer *paired* comparisons on identical folds. When two runs use different
+    fold structures the comparison is still valid on pooled OOF over the same
+    image set, but it loses pairing and carries more variance than the
+    arithmetic shows — flag it when it happens.
 - A no-flag `--folds 5` run reproduces the current best config
   (`p2-blr4e4-32`, seed 42, ~40 min). Changing
   `--model-name` with a checkpoint set requires `--weights-checkpoint None`
@@ -45,19 +78,40 @@ and none of its numbers are comparable to anything here.
 | does added augmentation help? | no; elastic is significantly harmful (−4.9pt, 2.1× SEM) on contour-only input | c7-* |
 | does removing augmentation help? | no; nothing clears the bar, scale jitter removal moves nothing → size cue not load-bearing; augmentation closed in both directions | n1-* |
 | is the error irreducible? | no — silhouette collisions explain ~3% of errors (electrode/voltorb IoU 0.969 is the max); evolution-line confusions are 12.7% of errors at 15× chance | confusion study |
-| mask polarity? | worth ~3pt despite being information-free; background = 1 wins (confirmed, 2 paired seeds, ~2.3× SEM) | n2-mask-inverted* |
-| SDT input channel? | **confirmed**: +1.5pt over 4 paired seeds (+2.1/+0.4/+0.8/+2.6), 15/20 matched folds positive, t=2.86, p=0.01; now the default | n2-*sdt* |
+| mask polarity? | ⚠ **weakened**: was ~3pt at 2 seeds; on corrected folds only −1.27pt at **0.78× SEM** (0.7586 vs 0.7459), i.e. not significant. Direction still favours background = 1, so the default stands, but the effect is not established. One seed vs the original two — needs a second seed to resolve | n2-mask-inverted*, p5-invert-mask-32 |
+| SDT input channel? | ⚠ **at risk, re-measuring**: +1.5pt over 4 paired seeds (t=2.86, p=0.01) — but the effect is *smaller than the 3.4pt fold artifact*, so it is the highest-risk default in the config. Re-verification in flight (p6-ref-26 vs p6-allmask-26) | n2-*sdt* |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 | edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
-| LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4, 32-epoch horizon; the historical 4e-4 collapse was a warmup artifact | p2-* |
+| LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4; the historical 4e-4 collapse was a warmup artifact. Effect is larger than the fold artifact, so likely robust — but see the horizon row, which did not survive | p2-* |
+| epoch horizon? | ⚠ **saturated, was overstated**: 26 and 32 epochs are within 0.1pt on corrected folds (0.7595 vs 0.7586). Phase 2 recorded the 32-epoch horizon as "genuinely used" (best epochs to 28); that was a fold artifact. 26 epochs is ~20% cheaper for the same result — default not yet changed, wants a second seed | p5-ref-26-stepmatched, p5-ref-32 |
+| higher backbone LR? | no — blr 8e-4 is +0.4pt at 0.3× SEM; the LR ceiling does not extend past 4e-4. Phase 2 schedule residue closed on this axis | p5-blr8e4 |
+| duplicate-mask hypothesis? | no — `(sdt, mask, sdt)` is −1.2pt at 0.6× SEM; the second raw mask copy in `(mask, sdt, mask)` is not load-bearing. Phase 1's open question resolved | p5-dupmask-sdt-mask-sdt |
+| does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
 
-**Current best: 0.716, two-seed mean of the config defaults** (`(mask, sdt,
-mask)` input + cosine/warmup/restore at blr 4e-4 over 32 epochs: 0.725 at seed
-42, 0.707 at seed 43). Per-seed pairing is the comparison standard: a Phase 3+
-run at seed 42 compares against **0.725** (`p2-blr4e4-32`). Progression of
-confirmed gains: 0.596 → 0.653 (ImageNet weights) → 0.677 (SDT channel) →
-0.716 (schedule/LR/horizon).
+**Current best: 0.7586** (`p5-ref-32`, the config defaults at seed 42 on
+polarity-corrected folds). The previously recorded 0.716/0.725 was the same
+config measured on distorted folds — **no model change accounts for the
+difference**; see the fold-correction note above.
+
+Reference table on corrected folds, all seed 42, all `(mask, sdt, mask)` +
+cosine/warmup/restore at blr 4e-4:
+
+| run | grouping | epochs | oof | SEM |
+|---|---|---|---|---|
+| `p5-ref-16` | IoU (superseded) | 16 | 0.7450 | 0.0118 |
+| `p5-ref-26-stepmatched` | IoU (superseded) | 26 | 0.7595 | 0.0121 |
+| `p5-ref-32` | IoU (superseded) | 32 | 0.7586 | 0.0154 |
+| `p6-ref-26` | **index (current)** | 26 | in flight | — |
+
+**Pair only against `p6-ref-26` once it lands.** The three `p5-ref-*` runs are
+on IoU-grouped folds, which share ~21% of fold membership with index-grouped
+folds — effectively unrelated splits. They remain useful as evidence about the
+*size* of the fold artifact, not as comparison baselines.
+
+Progression of confirmed gains (mixed fold regimes, so read as trend not
+ledger): 0.596 → 0.653 (ImageNet weights) → 0.677 (SDT channel) → 0.716
+(schedule/LR) → 0.7586 (same config, folds corrected).
 
 What the failures collectively point at: the bottleneck is not capacity,
 regularization, data variety, or task ambiguity — it is how much discriminating
@@ -93,38 +147,46 @@ cheap single-factor tests run at `--epochs 16` (paired reference `p2-blr4e-4`,
 
 ## Next session — start here
 
-Phases 1-3 are done (1 and 3 negative, 2 the big win). In priority order:
+The 2026-07-20 session was spent almost entirely on fold correctness, not on
+the roadmap. Two fold bugs were found and fixed, the leak decomposition ran
+twice (once under each grouping), and four Phase 5 flag items were cleared.
+**The roadmap did not advance; the measuring instrument did.**
 
-1. **Leak decomposition** — the gate for the data lever, likely one flag combo:
-   ```bash
-   uv run python scripts/training.py --run-name p5-leak-decomposition --folds 5 --epochs 16 --no-exclude-shiny
-   ```
-   Grouping was verified 2026-07-20 under the fixed polarity: over the full
-   2160-image set, 1440 clusters, 1439 images in multi-image clusters, shiny
-   twins correctly grouped with their normals.
+Re-validation comes before new phases. In priority order:
 
-   **Scoring is three-way, not two.** `--no-exclude-shiny` adds 853 images, and
-   they are not all duplicates: ~719 have a normal-series twin, but **134 do
-   not** (see Known data issues). So score (a) raw pooled OOF, (b) filtered to
-   normal-series indices — the number comparable to `p2-blr4e-4` (0.707), and
-   (c) filtered to the 134 unpaired shinies. Without (c) a positive result is
-   ambiguous between "duplicates help" and "134 novel silhouettes help", which
-   is exactly the distinction this experiment exists to make. A clear positive
-   *driven by (c)* → all-gen scraping/pretraining becomes the top priority; a
-   null is only a weak negative (duplicates carry less information than novel
-   sprites).
-2. **Cheap flags-only Phase 5 items**, any order, all at the 16-epoch protocol:
-   duplicate-mask hypothesis (`--input-channels sdt mask sdt` and friends),
-   schedule residue (`--backbone-lr 8e-4`; `--epochs 64` at full protocol),
-   depth re-sweep (`--train-last-n-layers 2|4|6`), weight decay sweep.
-3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
-   sketch/quickdraw checkpoint; the loading-order fix in
-   `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
-4. **Phase 6 (final)** once the above settle: TTA, seed-ensemble-within-fold
-   (needs logits persisted in `evaluation.py`), then the one-shot test split.
+1. **Finish the SDT re-verification** (in flight at session end): `p6-ref-26`
+   vs `p6-allmask-26`, both `--epochs 26` on index-grouped folds. `p6-ref-26`
+   doubles as the new reference baseline — everything downstream pairs against
+   it. SDT is the riskiest surviving default: +1.5pt measured, against a 3.4pt
+   fold artifact. If it fails to replicate, the default input encoding is
+   unsupported and Phase 1's conclusions need revisiting with it.
+2. **The 148-pose-variant run** — the sharpest version of the data question,
+   and it did not exist before this session. `exclude_shiny=True` drops all 853
+   shiny sprites, but **705 are exact duplicates and 148 are pose variants**
+   (different animation frames of the gen-5 sprite: genuinely different
+   silhouettes, same subject — see Known data issues). Training on normal + the
+   148 isolates novel-pose value with no duplicate contamination and no
+   step-count confound, unlike the leak decomposition which carries both. Needs
+   a small data.py change to admit a manifest-driven subset. This settles the
+   data lever more cheaply and far more cleanly than an all-gen scrape.
+3. **Second seeds on the two weakened results**: mask polarity (now 0.78× SEM)
+   and the 26-vs-32 epoch horizon. Neither blocks progress; both are currently
+   recorded as unresolved rather than overturned, which is not a state the log
+   should sit in for long.
+4. **Then the roadmap resumes** — Phase 4 sketch checkpoints, remaining Phase 5
+   items (depth re-sweep, optimizer, weight decay, aspect-preserved crop).
+   Phase 6 last, and not until the config stops moving: ensembling amplifies
+   whatever config it is handed.
 
-State as of the end of the last session: best 0.716 (two-seed mean of the
-defaults; 0.725 at seed 42), tree clean, all results in the table above.
+Cleared this session, no longer worth running: `--backbone-lr 8e-4` (null),
+`(sdt, mask, sdt)` duplicate-mask hypothesis (null), the leak decomposition
+itself (plausible but unconfirmed at 1.2× SEM), and the 64-epoch horizon
+(pointless — 32 already buys nothing over 26).
+
+State at session end: best **0.7586** (`p5-ref-32`, defaults on
+polarity-corrected folds; the old 0.716 was the same config mismeasured).
+`p6-ref-26` and `p6-allmask-26` were still running. Branch
+`fix/near-duplicate-mask-polarity` carries both fold fixes and is **unpushed**.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -296,14 +358,40 @@ on the settled config:
   The bug over-merged 41 classes, all low-occupancy (voltorb 9→5, electrode
   9→6, metapod 8→6). Fixed 2026-07-20.
   - Consequence: grouped folds were not binding on the deduplicated dataset.
-    No past result needs correcting — grouping could only ever have been
-    conservative — but "grouped CV protects us" is not load-bearing here. It
-    *is* load-bearing with `--no-exclude-shiny`, where twins are real.
-- **134 shiny sprites have no normal-series twin** (max IoU ≤ 0.97 against every
-  normal sprite of their class; zero exact matches missed by clustering). That
-  is ~1 per class, at the tail of the shiny index range. Unexplained: the
-  manifest has normal series 8-9 sprites vs shiny 5-6, so the asymmetry should
-  produce unpaired *normal* sprites, not unpaired shinies. Resolve during the
-  leak decomposition — see the scoring note there.
+    Absolute numbers *do* need correcting (the fold shuffle was worth 3.4pt),
+    but grouping itself could only ever have been conservative there. It *is*
+    load-bearing with `--no-exclude-shiny`, where twins are real.
+- **The gen-5 sprites are animated, and normal/shiny screenshots catch
+  different frames.** This is why IoU grouping was replaced with index-based
+  pairing (`sprite_groups`, 2026-07-20). Measured over all 853 shiny sprites,
+  paired by index rather than overlap:
+  - **705 are exact recolours** (IoU ≥ 0.999 — pixel-identical after
+    thresholding), **148 are not**.
+  - All 148 involve one sprite index: **145 at `image-5`, 3 at `image-6`**
+    (golbat, slowpoke, gastly). Sprites at every other position are 100% exact
+    across all 151 classes.
+  - Severity tracks pose mobility, confirming the animation-frame cause:
+    aerodactyl 0.138, golbat 0.238 (wings open vs closed), charizard 0.460 …
+    ninetales 0.997, rhydon 0.996 (static poses).
+  - **No IoU threshold can work.** The animated pairs run 0.14–0.997 and are
+    interleaved with genuinely-distinct artwork by pose, not separated from it.
+    Catching ninetales needs ~0.99, which still misses every winged case;
+    catching aerodactyl would group most of the dataset. The old 0.97 cutoff let
+    **39 pairs in the 0.90–0.97 window** straddle folds — near-identical images
+    of the same sprite, which is ~3.5% of the 1110 scored images and enough to
+    manufacture the leak decomposition's original +2.9pt on its own. Re-running
+    under index grouping cost it 0.8pt of that.
+  - The pairing rule is `normal = shiny - shiny_start + 1`, pairing from
+    `image-1` because `image-0` is the gen-1 sprite and predates shinies. It
+    resolves all 853 with no leftovers: 2160 images → 1307 groups, exactly the
+    normal-series count.
+  - **Supersedes an earlier claim in this file** that 134 shiny sprites were
+    "unpaired novel silhouettes". They were never unpaired — they are the
+    animated `image-5`/`image-6` partners, found only by index, not overlap.
+- **`exclude_shiny=True` discards 148 genuine pose variants** along with the 705
+  duplicates it is meant to remove. Different animation frames are different
+  silhouettes of the same subject, which is plausibly useful training signal and
+  is not a duplicate in any sense that matters to a silhouette classifier. This
+  is the basis of the 148-pose-variant experiment in "Next session".
 - Raw sprite size is a near-perfect generation proxy (56×56 Gen 1 … 128×128
   Gen 6+) — a shortcut to keep out of preprocessing.
