@@ -56,6 +56,19 @@ def load_pretrained_model(
 	return model
 
 
+def apply_stem(model, stem="default"):
+	"""Reduce the stem's 4x downsampling so thin contour detail survives."""
+	if stem == "default":
+		return model
+	if stem == "nomaxpool":
+		model.maxpool = torch.nn.Identity()
+	elif stem == "stride1":
+		model.conv1.stride = (1, 1)
+	else:
+		raise ValueError(f"unknown stem: {stem!r}; valid: 'default', 'nomaxpool', 'stride1'")
+	return model
+
+
 def set_trainable_weights(model, train_last_n_layers=0):
 	for parameter in model.parameters():
 		parameter.requires_grad = False

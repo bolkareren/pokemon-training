@@ -20,7 +20,7 @@ and none of its numbers are comparable to anything here.
   a second `random_state` — measured reference variance on a seed change alone
   is ~±1pt.
 - A no-flag `--folds 5` run reproduces the current best config
-  (`n2-origmask-sdt`, seed 42). Changing
+  (`p2-blr4e4-32`, seed 42, ~40 min). Changing
   `--model-name` with a checkpoint set requires `--weights-checkpoint None`
   (fails fast otherwise). `val_size` is unused in fold mode.
 - Every fold run logs `oof_predictions.json`; `scripts/confusion_study.py`
@@ -48,16 +48,29 @@ and none of its numbers are comparable to anything here.
 | mask polarity? | worth ~3pt despite being information-free; background = 1 wins (confirmed, 2 paired seeds, ~2.3× SEM) | n2-mask-inverted* |
 | SDT input channel? | **confirmed**: +1.5pt over 4 paired seeds (+2.1/+0.4/+0.8/+2.6), 15/20 matched folds positive, t=2.86, p=0.01; now the default | n2-*sdt* |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
+| edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
+| LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4, 32-epoch horizon; the historical 4e-4 collapse was a warmup artifact | p2-* |
+| reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
 
-**Current best: 0.677, mean over four seeds of `(mask, sdt, mask)` — now the
-config default** (0.674/0.666/0.675/0.693 at seeds 42-45; the all-mask baseline
-re-measured 0.653/0.662/0.667/0.667 on the same seeds). Per-seed pairing is the
-comparison standard: a Phase 1+ run at seed 42 compares against 0.674.
+**Current best: 0.716, two-seed mean of the config defaults** (`(mask, sdt,
+mask)` input + cosine/warmup/restore at blr 4e-4 over 32 epochs: 0.725 at seed
+42, 0.707 at seed 43). Per-seed pairing is the comparison standard: a Phase 3+
+run at seed 42 compares against **0.725** (`p2-blr4e4-32`). Progression of
+confirmed gains: 0.596 → 0.653 (ImageNet weights) → 0.677 (SDT channel) →
+0.716 (schedule/LR/horizon).
 
 What the failures collectively point at: the bottleneck is not capacity,
 regularization, data variety, or task ambiguity — it is how much discriminating
 information reaches (and survives) the network. That is what the roadmap
 attacks: input representation first, then the stem that downsamples it away.
+
+A pattern across the confirmed gains: **every one so far is model-agnostic
+tooling** — data hygiene (dedup/grouped CV), pretrained-weight origin, input
+encoding and polarity, LR schedule and horizon. None required touching the
+architecture, and all of them transfer to whatever backbone eventually wins.
+The remaining roadmap is where that stops: Phases 3-4 are the first
+model-*specific* interventions, which is also why they were sequenced after
+the agnostic levers were exhausted.
 
 Also measured, and load-bearing:
 
@@ -74,7 +87,38 @@ Also measured, and load-bearing:
 # Roadmap
 
 Phases run in order. Every phase: single model, 5-fold grouped CV, 2× SEM bar,
-second seed on anything that would change a default.
+second seed on anything that would change a default. **Exploration protocol:**
+cheap single-factor tests run at `--epochs 16` (paired reference `p2-blr4e-4`,
+0.707 at seed 42); winners are re-run at the full 32-epoch default.
+
+## Next session — start here
+
+Phases 1-3 are done (1 and 3 negative, 2 the big win). In priority order:
+
+1. **Leak decomposition** — the gate for the data lever, likely one flag combo:
+   ```bash
+   uv run python scripts/training.py --run-name p5-leak-decomposition --folds 5 --epochs 16 --no-exclude-shiny
+   ```
+   First verify the group-aware folds catch every exact duplicate (shiny twins
+   are IoU 1.0 within the same class, so `near_duplicate_groups` should cluster
+   them — confirm with `duplicate_audit.py` or a direct check that no val image
+   has an exact twin in train). Score it two ways: raw pooled OOF, and filtered
+   to normal-series indices (post-hoc, from `oof_predictions.json`) for the
+   number comparable to `p2-blr4e-4` (0.707). A clear positive → all-gen
+   scraping/pretraining becomes the top priority; a null is only a weak
+   negative (duplicates carry less information than novel sprites).
+2. **Cheap flags-only Phase 5 items**, any order, all at the 16-epoch protocol:
+   duplicate-mask hypothesis (`--input-channels sdt mask sdt` and friends),
+   schedule residue (`--backbone-lr 8e-4`; `--epochs 64` at full protocol),
+   depth re-sweep (`--train-last-n-layers 2|4|6`), weight decay sweep.
+3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
+   sketch/quickdraw checkpoint; the loading-order fix in
+   `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
+4. **Phase 6 (final)** once the above settle: TTA, seed-ensemble-within-fold
+   (needs logits persisted in `evaluation.py`), then the one-shot test split.
+
+State as of the end of the last session: best 0.716 (two-seed mean of the
+defaults; 0.725 at seed 42), tree clean, all results in the table above.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -109,31 +153,71 @@ Backup third-channel candidate (untested): level-set curvature of the EDT
 field (`div(∇φ/|∇φ|)` via two `numpy.gradient` calls — dense, smooth, no new
 dependencies).
 
-## Phase 2 — Schedule and checkpointing
+## Phase 2 — Schedule and checkpointing (done: **+5.1pt, the largest phase
+gain in the project**)
 
-There is currently **no LR scheduler** (constant LR, 16 epochs) and the
-*final*-epoch model is what gets scored. Strongest prior evidence of anything
-untested: the leaky-era `blr=4e-4` collapse and the `c1-lastN4` fold divergence
-share the no-warmup signature. Also de-confounds Phase 3+, which unfreezes
-more of the network.
+Design (settled with the user): best epoch selected on val_loss; fixed budget
+with restore-best, no early exit, so the cosine horizon stays deterministic;
+per-step cosine to ~0 with 2-epoch linear warmup, each param group keeping its
+own base LR.
 
-- [ ] **p2-best-epoch** — restore the best-val-loss epoch before scoring.
-      Free accuracy; removes `epochs` as a tuning axis.
-- [ ] **p2-cosine-warmup** — cosine decay + short linear warmup.
-- [ ] **p2-epochs32** — with best-epoch restoration in place, longer training
-      can only help; find where it saturates.
+Results at seed 42, paired against `n2-origmask-sdt` (0.674, identical folds):
+
+| run | oof | delta | × SEM | fold best-epochs |
+|---|---|---|---|---|
+| **p2-blr4e4-32** | **0.725** | **+5.1** | **4.6** | — |
+| p2-blr4e-4 (16ep) | 0.707 | +3.3 | 2.2 | 10-14 |
+| p2-cosine-restore-32 | 0.705 | +3.2 | 1.7 | 16-28 |
+| p2-cosine-restore-16 | 0.696 | +2.3 | 1.0 | 11-15 |
+| p2-cosine-warmup | 0.689 | +1.5 | 0.7 | — |
+| p2-best-epoch | 0.677 | +0.3 | 0.3 | 14-15 |
+
+Second seed: p2-blr4e-4-seed43 +2.4pt, **p2-blr4e4-32-seed43 0.707, +4.1pt**
+— the winner replicates decisively.
+
+- **The schedule is the driver; restoration alone is nearly worthless**
+  (best epochs under constant LR are 14-15 of 16 — the final epoch was already
+  near-optimal). Restoration's value is enabling long horizons safely.
+- **The LR ceiling doubled under warmup.** `blr=4e-4`, a −49.8pt collapse
+  without warmup, is now the best setting — the historical collapse was a
+  warmup artifact, exactly as hypothesized.
+- **The horizon is genuinely used** (best epochs up to 28 of 32) and combines
+  superadditively with the higher LR (+1.8 to +2.0 over each alone).
+- **The gain is broad, not mechanism-specific**: errors 385 → 305 vs the
+  pre-SDT era while the evolution-line share stays ~11% — unlike SDT, which
+  targeted that mechanism.
+
+**Defaults flipped** (evidence above): `scheduler="cosine"`,
+`restore_best_epoch=True`, `backbone_lr=4e-4`, `epochs=32`. A default run now
+takes ~40 min. Untested residue for Phase 5: warmup length, higher LRs (8e-4),
+longer horizons (64).
+
+Metric note: `fold_gap` for runs up to and including `p3-nomaxpool` was
+measured at the *final* epoch; later runs measure it at the epoch actually
+scored (the restored one). Accuracy metrics are unaffected.
 
 ## Phase 3 — Reduced-stride stem
 
-The architecture-side fix for the same mechanism Phase 1 works around: the
+The architecture-side fix for the same mechanism Phase 1 worked around: the
 ImageNet stem (stride-2 conv + stride-2 maxpool) discards thin contour detail
 before the first residual block. Keep ResNet50 + ImageNet weights; surgery only
-where our input provably differs from natural images.
+where our input provably differs from natural images. Phase 2's warmup landing
+first matters here: stem changes shift early-layer statistics, and constant-LR
+training near the instability boundary would have confounded the comparison.
+Compute note: larger early feature maps multiply the now-40-min default run.
 
-- [ ] **p3-nomaxpool** — drop the stem maxpool (cheapest; 2× feature maps).
-- [ ] **p3-stride1-conv** — also conv1 stride 1 if compute allows (4× maps).
-- [ ] Interpret jointly with Phase 1: edge-channel gain and stem gain should
-      be partially redundant if the thin-feature diagnosis is right.
+- [x] **p3-nomaxpool** — `--stem nomaxpool --epochs 16`: **0.699, −0.8pt vs
+      the paired 16-epoch reference (`p2-blr4e-4`, 0.707) at −0.4× SEM**, for
+      2.8× the compute (56 min). Mixed fold signs (2 up, 3 down).
+- [x] **p3-stride1-conv** — **not run**: gated on nomaxpool showing ≥1× SEM
+      signal, which it did not. The `stem` config option remains for later use.
+
+**Verdict: the stem is not the bottleneck.** Third strike for the thin-feature
+hypothesis (sparse curv channel dead, edge channel retired, now doubled stem
+resolution flat-negative): at this data scale the network is not starved of
+contour detail. Whatever separates 0.72 from the ceiling lives elsewhere —
+consistent with the diversity measurement (high variance in *what* gets
+learned) pointing at data quantity, which the leak decomposition tests next.
 
 ## Phase 4 — Sketch-pretrained backbones (+ edge)
 

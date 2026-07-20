@@ -9,11 +9,13 @@ silhouettes, for a "Who's That Pokémon?" style guessing game. Sprites are
 scraped from pokemondb.net, converted to silhouettes, and used to fine-tune a
 torchvision backbone.
 
-**Current best: 0.677 out-of-fold accuracy** (single model, 5-fold grouped CV,
-n=1110, mean over four seeds of the config defaults — the SDT input channel is
-confirmed and default). Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
-interpreting any experiment — it holds the protocol, all measured results, and
-the active roadmap (currently Phase 1: edge third-channel).
+**Current best: 0.716 out-of-fold accuracy** (single model, 5-fold grouped CV,
+n=1110, two-seed mean of the config defaults — SDT input channel plus
+cosine/warmup/restore-best at blr 4e-4 over 32 epochs, all confirmed). Read
+[EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting any experiment
+— it holds the protocol, all measured results, and the active roadmap
+(see its "Next session" section: leak decomposition first, then the
+data-vs-checkpoint fork it gates).
 
 ## Commands
 
@@ -46,8 +48,9 @@ There is no test suite yet.
 - [pokemon_training/model.py](pokemon_training/model.py) — backbone loading,
   partial freezing, optimizer with split backbone/classifier LRs.
 - [pokemon_training/train.py](pokemon_training/train.py) /
-  [evaluation.py](pokemon_training/evaluation.py) — epoch loop, top-k metrics,
-  `predict_top_k`. Device: cuda → mps → cpu.
+  [evaluation.py](pokemon_training/evaluation.py) — epoch loop, per-step
+  cosine+warmup scheduler, best-epoch (val_loss) restoration, top-k metrics.
+  Device: cuda → mps → cpu.
 - [scripts/training.py](scripts/training.py) — entrypoint; wires config → data
   → model → MLflow. Fold runs log `oof_predictions.json`, the confusion
   study's input.
