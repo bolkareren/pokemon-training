@@ -99,14 +99,20 @@ Phases 1-3 are done (1 and 3 negative, 2 the big win). In priority order:
    ```bash
    uv run python scripts/training.py --run-name p5-leak-decomposition --folds 5 --epochs 16 --no-exclude-shiny
    ```
-   First verify the group-aware folds catch every exact duplicate (shiny twins
-   are IoU 1.0 within the same class, so `near_duplicate_groups` should cluster
-   them — confirm with `duplicate_audit.py` or a direct check that no val image
-   has an exact twin in train). Score it two ways: raw pooled OOF, and filtered
-   to normal-series indices (post-hoc, from `oof_predictions.json`) for the
-   number comparable to `p2-blr4e-4` (0.707). A clear positive → all-gen
-   scraping/pretraining becomes the top priority; a null is only a weak
-   negative (duplicates carry less information than novel sprites).
+   Grouping was verified 2026-07-20 under the fixed polarity: over the full
+   2160-image set, 1440 clusters, 1439 images in multi-image clusters, shiny
+   twins correctly grouped with their normals.
+
+   **Scoring is three-way, not two.** `--no-exclude-shiny` adds 853 images, and
+   they are not all duplicates: ~719 have a normal-series twin, but **134 do
+   not** (see Known data issues). So score (a) raw pooled OOF, (b) filtered to
+   normal-series indices — the number comparable to `p2-blr4e-4` (0.707), and
+   (c) filtered to the 134 unpaired shinies. Without (c) a positive result is
+   ambiguous between "duplicates help" and "134 novel silhouettes help", which
+   is exactly the distinction this experiment exists to make. A clear positive
+   *driven by (c)* → all-gen scraping/pretraining becomes the top priority; a
+   null is only a weak negative (duplicates carry less information than novel
+   sprites).
 2. **Cheap flags-only Phase 5 items**, any order, all at the 16-epoch protocol:
    duplicate-mask hypothesis (`--input-channels sdt mask sdt` and friends),
    schedule residue (`--backbone-lr 8e-4`; `--epochs 64` at full protocol),
@@ -279,7 +285,25 @@ on the settled config:
 
 ## Known data issues
 
-- 56 near-duplicate clusters remain in the normal series; grouped folds keep
-  them from straddling splits.
+- **The normal series is essentially duplicate-free: 1306 clusters over 1307
+  images — one genuine near-duplicate pair.** The previously recorded "56
+  clusters" was an artifact of a polarity bug in `near_duplicate_groups`, which
+  computed IoU over the *background* rather than the creature. Background IoU is
+  inflated by the empty-canvas fraction, and body occupancy ranges 7.2%
+  (magnemite) to 48.5% (venusaur), mean 24.9% — so the 0.97 threshold was
+  effectively testing "is this Pokémon small?". Mean within-class pairwise IoU:
+  0.381 creature-mask vs 0.737 background-mask; corr(occupancy, gap) = −0.975.
+  The bug over-merged 41 classes, all low-occupancy (voltorb 9→5, electrode
+  9→6, metapod 8→6). Fixed 2026-07-20.
+  - Consequence: grouped folds were not binding on the deduplicated dataset.
+    No past result needs correcting — grouping could only ever have been
+    conservative — but "grouped CV protects us" is not load-bearing here. It
+    *is* load-bearing with `--no-exclude-shiny`, where twins are real.
+- **134 shiny sprites have no normal-series twin** (max IoU ≤ 0.97 against every
+  normal sprite of their class; zero exact matches missed by clustering). That
+  is ~1 per class, at the tail of the shiny index range. Unexplained: the
+  manifest has normal series 8-9 sprites vs shiny 5-6, so the asymmetry should
+  produce unpaired *normal* sprites, not unpaired shinies. Resolve during the
+  leak decomposition — see the scoring note there.
 - Raw sprite size is a near-perfect generation proxy (56×56 Gen 1 … 128×128
   Gen 6+) — a shortcut to keep out of preprocessing.
