@@ -79,7 +79,7 @@ and none of its numbers are comparable to anything here.
 | does removing augmentation help? | no; nothing clears the bar, scale jitter removal moves nothing → size cue not load-bearing; augmentation closed in both directions | n1-* |
 | is the error irreducible? | no — silhouette collisions explain ~3% of errors (electrode/voltorb IoU 0.969 is the max); evolution-line confusions are 12.7% of errors at 15× chance | confusion study |
 | mask polarity? | ⚠ **weakened**: was ~3pt at 2 seeds; on corrected folds only −1.27pt at **0.78× SEM** (0.7586 vs 0.7459), i.e. not significant. Direction still favours background = 1, so the default stands, but the effect is not established. One seed vs the original two — needs a second seed to resolve | n2-mask-inverted*, p5-invert-mask-32 |
-| SDT input channel? | ⚠ **at risk, re-measuring**: +1.5pt over 4 paired seeds (t=2.86, p=0.01) — but the effect is *smaller than the 3.4pt fold artifact*, so it is the highest-risk default in the config. Re-verification in flight (p6-ref-26 vs p6-allmask-26) | n2-*sdt* |
+| SDT input channel? | **consistent, not independently confirmed**. Original: +1.5pt over 4 paired seeds (t=2.86, p=0.01). On corrected folds, one paired seed gives **+1.08pt at 0.64× SEM** (3/5 folds, paired t=0.789 p=0.47; McNemar 66 fixed / 54 broken, p=0.32). That sits inside the original per-seed range (+0.4…+2.6), so it replicates in direction and magnitude but cannot confirm alone — **a +1.5pt effect is not detectable in a single run** (2× SEM ≈ 3.4pt here). Default stands; full re-confirmation needs 3 more paired seeds (~3h) | n2-*sdt*, p6-ref-26 vs p6-allmask-26 |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 | edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
 | LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4; the historical 4e-4 collapse was a warmup artifact. Effect is larger than the fold artifact, so likely robust — but see the horizon row, which did not survive | p2-* |
@@ -89,25 +89,34 @@ and none of its numbers are comparable to anything here.
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
 
-**Current best: 0.7586** (`p5-ref-32`, the config defaults at seed 42 on
-polarity-corrected folds). The previously recorded 0.716/0.725 was the same
-config measured on distorted folds — **no model change accounts for the
-difference**; see the fold-correction note above.
+**Current reference: 0.7496** (`p6-ref-26`, the config defaults at seed 42 on
+index-grouped folds — **pair every new experiment against this**). The best
+number ever measured is 0.7586 (`p5-ref-32`) but it is on superseded folds.
+The previously recorded 0.716/0.725 was the same config on distorted folds —
+**no model change accounts for the difference**; see the fold-correction note.
 
-Reference table on corrected folds, all seed 42, all `(mask, sdt, mask)` +
-cosine/warmup/restore at blr 4e-4:
+Reference table, all seed 42, all `(mask, sdt, mask)` + cosine/warmup/restore
+at blr 4e-4:
 
 | run | grouping | epochs | oof | SEM |
 |---|---|---|---|---|
 | `p5-ref-16` | IoU (superseded) | 16 | 0.7450 | 0.0118 |
 | `p5-ref-26-stepmatched` | IoU (superseded) | 26 | 0.7595 | 0.0121 |
 | `p5-ref-32` | IoU (superseded) | 32 | 0.7586 | 0.0154 |
-| `p6-ref-26` | **index (current)** | 26 | in flight | — |
+| **`p6-ref-26`** | **index (current)** | **26** | **0.7496** | **0.0155** |
 
-**Pair only against `p6-ref-26` once it lands.** The three `p5-ref-*` runs are
-on IoU-grouped folds, which share ~21% of fold membership with index-grouped
-folds — effectively unrelated splits. They remain useful as evidence about the
-*size* of the fold artifact, not as comparison baselines.
+**Pair only against `p6-ref-26`.** The three `p5-ref-*` runs are on IoU-grouped
+folds, which share ~21% of fold membership with index-grouped folds —
+effectively unrelated splits. They remain useful as evidence about the *size*
+of the fold artifact, not as comparison baselines. (`p6-ref-26` vs
+`p5-ref-26-stepmatched` is 0.7496 vs 0.7595: unpaired, ~1pt, noise.)
+
+**Single-run resolution is ~3.4pt.** Combined SEM against this reference is
+~0.017, so the 2× bar is ~3.4pt — larger than *most* effects in the table
+above. Any hypothesis worth under ~3pt needs paired folds across multiple
+seeds, not one run per arm; `p6-ref-26` fold accuracies alone span 0.7207 to
+0.7973. Budget accordingly when planning an experiment, or it cannot answer
+the question asked of it.
 
 Progression of confirmed gains (mixed fold regimes, so read as trend not
 ledger): 0.596 → 0.653 (ImageNet weights) → 0.677 (SDT channel) → 0.716
@@ -142,8 +151,17 @@ Also measured, and load-bearing:
 
 Phases run in order. Every phase: single model, 5-fold grouped CV, 2× SEM bar,
 second seed on anything that would change a default. **Exploration protocol:**
-cheap single-factor tests run at `--epochs 16` (paired reference `p2-blr4e-4`,
-0.707 at seed 42); winners are re-run at the full 32-epoch default.
+cheap single-factor tests run at `--epochs 26` paired against `p6-ref-26`
+(0.7496 at seed 42) — 26 rather than the old 16, since 26 and 32 measure the
+same and 16 loses ~1.4pt of real optimization headroom. Winners re-run at the
+full default.
+
+**Power check before you run anything.** Single-run resolution against the
+reference is ~3.4pt (2× combined SEM). Most remaining hypotheses are worth
+less than that, so a one-run-per-arm design will return a null regardless of
+truth — the SDT re-verification demonstrated exactly this failure. For any
+effect expected under ~3pt, budget paired folds across ≥2 seeds and report the
+paired t-test and McNemar counts, not just the oof delta.
 
 ## Next session — start here
 
@@ -152,15 +170,11 @@ the roadmap. Two fold bugs were found and fixed, the leak decomposition ran
 twice (once under each grouping), and four Phase 5 flag items were cleared.
 **The roadmap did not advance; the measuring instrument did.**
 
-Re-validation comes before new phases. In priority order:
+Re-validation is **done**: the baseline is re-established (`p6-ref-26`, 0.7496)
+and SDT replicated in direction and magnitude. The defaults are not disturbed,
+so the roadmap resumes. In priority order:
 
-1. **Finish the SDT re-verification** (in flight at session end): `p6-ref-26`
-   vs `p6-allmask-26`, both `--epochs 26` on index-grouped folds. `p6-ref-26`
-   doubles as the new reference baseline — everything downstream pairs against
-   it. SDT is the riskiest surviving default: +1.5pt measured, against a 3.4pt
-   fold artifact. If it fails to replicate, the default input encoding is
-   unsupported and Phase 1's conclusions need revisiting with it.
-2. **The 148-pose-variant run** — the sharpest version of the data question,
+1. **The 148-pose-variant run** — the sharpest version of the data question,
    and it did not exist before this session. `exclude_shiny=True` drops all 853
    shiny sprites, but **705 are exact duplicates and 148 are pose variants**
    (different animation frames of the gen-5 sprite: genuinely different
@@ -169,24 +183,40 @@ Re-validation comes before new phases. In priority order:
    step-count confound, unlike the leak decomposition which carries both. Needs
    a small data.py change to admit a manifest-driven subset. This settles the
    data lever more cheaply and far more cleanly than an all-gen scrape.
-3. **Second seeds on the two weakened results**: mask polarity (now 0.78× SEM)
-   and the 26-vs-32 epoch horizon. Neither blocks progress; both are currently
-   recorded as unresolved rather than overturned, which is not a state the log
-   should sit in for long.
-4. **Then the roadmap resumes** — Phase 4 sketch checkpoints, remaining Phase 5
-   items (depth re-sweep, optimizer, weight decay, aspect-preserved crop).
-   Phase 6 last, and not until the config stops moving: ensembling amplifies
-   whatever config it is handed.
+2. **Aspect-preserved crop** (Phase 5) — promoted, because this session
+   measured the thing that motivates it: body occupancy averages **24.9%** of
+   the canvas and ranges 7.2% (magnemite) to 48.5% (venusaur). Roughly 3/4 of
+   every image is empty, and small Pokémon are effectively trained at far lower
+   resolution than large ones. Bbox-crop + pad also removes absolute size,
+   which is the near-perfect generation proxy the "no metadata shortcuts" rule
+   exists to keep out — N1 measured size as ~useless as a cue, so this should
+   be close to free. `scripts/confusion_study.py` already has the crop helper.
+   Plausibly the largest untested effect on the list.
+3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
+   sketch/quickdraw checkpoint; the loading-order fix in
+   `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
+   Expectations stay low (the shape-biased precedent lost 5.7pt).
+4. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
+   (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
+   All are cheap, and all are **likely below single-run resolution** — plan
+   them as multi-seed paired batteries or accept they will read as null.
+5. **Second seeds on the two weakened results** — mask polarity (0.78× SEM)
+   and the 26-vs-32 horizon. Recorded as unresolved rather than overturned,
+   which is not a state to leave indefinitely, but neither blocks progress.
+6. **Phase 6 last**, and not until the config stops moving: ensembling
+   amplifies whatever config it is handed.
 
 Cleared this session, no longer worth running: `--backbone-lr 8e-4` (null),
 `(sdt, mask, sdt)` duplicate-mask hypothesis (null), the leak decomposition
 itself (plausible but unconfirmed at 1.2× SEM), and the 64-epoch horizon
 (pointless — 32 already buys nothing over 26).
 
-State at session end: best **0.7586** (`p5-ref-32`, defaults on
-polarity-corrected folds; the old 0.716 was the same config mismeasured).
-`p6-ref-26` and `p6-allmask-26` were still running. Branch
-`fix/near-duplicate-mask-polarity` carries both fold fixes and is **unpushed**.
+State at session end: reference **0.7496** (`p6-ref-26`, defaults on
+index-grouped folds — the number to pair against). Best ever measured is
+0.7586 (`p5-ref-32`) but on superseded folds; the old 0.716 was the same
+config mismeasured. Tree clean, nothing running. Branch
+`fix/near-duplicate-mask-polarity` carries both fold fixes plus the log
+rewrite and is **unpushed**.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -321,8 +351,12 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
 - [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
       winning `(mask, sdt, mask)` load-bearing? Channel-position swaps,
       e.g. `(sdt, mask, sdt)`. See the Phase 1 pattern note.
-- [ ] **aspect-preserved crop** — bbox-crop + pad; resolution gain at a size
-      cost N1 measured as ~zero.
+- [ ] **aspect-preserved crop** — **promoted to the top of the queue**, see
+      "Next session". Bbox-crop + pad; resolution gain at a size cost N1
+      measured as ~zero. Occupancy was quantified 2026-07-20: mean 24.9% of
+      canvas, range 7.2-48.5%, so ~3/4 of every image is empty and small
+      Pokémon train at far lower effective resolution than large ones. Crop
+      helper already exists in `scripts/confusion_study.py`.
 - [ ] **backbone re-check** — resnet18 vs 50 was 1.9× SEM, just under the bar.
 - [ ] **confusion-study leftovers** — body-plan-aware descriptor, error rate
       by generation (+ generation-held-out split), cross-class near-duplicate
