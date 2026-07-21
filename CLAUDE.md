@@ -20,6 +20,24 @@ the active roadmap (see its "Next session" section: the data and framing levers
 are closed, so what remains is lower-prior model-side surgery — Phase 4 sketch
 checkpoints, then the Phase 5 depth/optimizer/weight-decay sweeps).
 
+## Workflow
+
+- **Solo project: commit and push straight to `main`.** No branch/PR ceremony is
+  required — push directly unless explicitly asked to open a PR. (This overrides
+  the default "branch before committing on main" behaviour.)
+- **Ask before implementing anything with several defensible designs** (selection
+  criterion, budget semantics, scheduler, stem surgery, descriptor choices):
+  present the concrete forks as a short `AskUserQuestion` (2–4 options, each with
+  a recommendation and honest trade-offs) and wait. The maintainer treats design
+  decisions as their call and engages with the trade-offs. Flags-only experiment
+  runs need no questions.
+- **Pre-register the decision rule before launching runs** — state how the result
+  will be judged (the 2× SEM bar; paired t-test + McNemar for paired batteries)
+  up front, and confirm any load-bearing result or default change at a second
+  seed. Single-run resolution is ~3.4pt, so any effect under ~3pt needs a
+  multi-seed paired battery, not one run per arm, or it reads as a null
+  regardless of truth.
+
 ## Commands
 
 ```bash
@@ -33,6 +51,7 @@ uv run ruff format .                 # formatter (tabs, including wraps)
 uv run python scripts/duplicate_audit.py           # duplication + split leakage
 uv run python scripts/generate_shiny_manifest.py   # regenerate shiny_index.json
 uv run python scripts/confusion_study.py           # confusions vs. similarity + evolution lines
+uv run python scripts/shape_descriptor_baseline.py --keep-orientation  # classical shape floor
 ```
 
 There is no test suite yet.
@@ -60,6 +79,11 @@ There is no test suite yet.
 - [scripts/data_scraping.py](scripts/data_scraping.py) /
   [data_processing.py](scripts/data_processing.py) — one-off data pipeline.
   Scraping sleeps between requests to pokemondb.net — don't remove the delays.
+- [scripts/shape_descriptor_baseline.py](scripts/shape_descriptor_baseline.py) —
+  classical shape-descriptor floor (elliptic Fourier + Hu moments + shape ratios
+  → shallow classifier). Reuses `data.py`'s split functions so its OOF set is
+  byte-identical to `p7-ref-26-s<seed>` and its `oof_predictions.json` is
+  directly comparable. Floor is ~0.285 OOF vs the CNN's 0.7496.
 
 ## The duplicate leak
 

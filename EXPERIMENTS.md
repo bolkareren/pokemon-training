@@ -52,8 +52,8 @@ and none of its numbers are comparable to anything here.
     fold structures the comparison is still valid on pooled OOF over the same
     image set, but it loses pairing and carries more variance than the
     arithmetic shows — flag it when it happens.
-- A no-flag `--folds 5` run reproduces the current best config
-  (`p2-blr4e4-32`, seed 42, ~40 min). Changing
+- A no-flag `--folds 5` run reproduces the current reference config
+  (`p7-ref-26-s42`, the defaults at seed 42 and 26 epochs, ~32 min). Changing
   `--model-name` with a checkpoint set requires `--weights-checkpoint None`
   (fails fast otherwise). `val_size` is unused in fold mode.
 - Every fold run logs `oof_predictions.json`; `scripts/confusion_study.py`
@@ -175,27 +175,19 @@ paired t-test and McNemar counts, not just the oof delta.
 
 ## Next session — start here
 
-The 2026-07-20 session was spent almost entirely on fold correctness, not on
-the roadmap. Two fold bugs were found and fixed, the leak decomposition ran
-twice (once under each grouping), and four Phase 5 flag items were cleared.
-**The roadmap did not advance; the measuring instrument did.**
-
-Re-validation is **done**: the baseline is re-established (`p6-ref-26`, 0.7496)
-and SDT replicated in direction and magnitude. The defaults are not disturbed.
-The pose-variant experiment then ran (3-seed paired, `p7-*`) and **closed the
-data lever**: +0.81pt mean, all seeds positive but well under the bar. The
-aspect-preserved crop — the roadmap's #1 item and "most likely real win" — then
-ran as a 3-seed paired battery (`p8-crop-26-s*` vs `p7-ref-26-s*`, fold
-membership byte-identical since crop is a pure load-time transform) and **also
-came back null: +0.78pt mean** (+1.89/+0.99/−0.54), paired t=1.13 p=0.28,
-McNemar net +26 p=0.25, under the 1.95pt bar. That is *three* levers now
-(pose variants, leak decomposition, crop) landing ~+0.8pt sub-bar — the data
-axis was already exhausted and the top framing lever is too. What remains is
-lower-prior model-side surgery. The two weakened ⚠ rows are now also resolved
-(3-seed `p9-*` batteries): **mask polarity confirmed** the default (inverting
-is −1.5pt, McNemar p=0.016) and the **epoch horizon is flat** (32 vs 26 is
-+0.45pt, p=0.42), so the `epochs` default is lowered 32 → 26. No pending default
-changes remain. In priority order:
+The data and framing levers are closed, the two weakened ⚠ rows are resolved,
+and a from-scratch floor is now on the board. Recent arc (2026-07-20 → -07-22):
+the fold-correction session re-established the baseline (`p6-ref-26`, 0.7496) and
+replicated SDT; the pose-variant test **closed the data lever** (+0.81pt, 3
+seeds, sub-bar); the aspect-preserved crop — the roadmap's former #1 "most likely
+real win" — **also came back null** (`p8-crop-26-s*` vs `p7-ref-26-s*`, +0.78pt
+mean, paired t p=0.28 / McNemar p=0.25); **mask polarity confirmed** the default
+(inverting −1.5pt, McNemar p=0.016) and the **epoch horizon is flat** (32 vs 26
++0.45pt p=0.42) so the `epochs` default is now 26. A **classical shape-descriptor
+floor** was measured at **~0.285 OOF** (46pt below the CNN): global shape carries
+real but limited signal, so the network's win is learned local/fine structure.
+**No pending default changes remain.** What's left is lower-prior model-side
+surgery, in priority order:
 
 1. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
    sketch/quickdraw checkpoint; the loading-order fix in
@@ -205,6 +197,10 @@ changes remain. In priority order:
    (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
    All are cheap, and all are **likely below single-run resolution** — plan
    them as multi-seed paired batteries or accept they will read as null.
+   - **Silhouette-native architecture** is the one genuinely orthogonal idea
+     (contour-sequence / point model over the boundary, vs the raster CNN).
+     It must clear the ~0.285 descriptor floor decisively *and* approach the
+     0.7496 CNN to matter; treat it as a research probe, not an expected win.
 3. **Phase 6 last**, and not until the config stops moving: ensembling
    amplifies whatever config it is handed.
 
@@ -217,20 +213,22 @@ upper bound on novel-silhouette value at this scale), and the **aspect-preserved
 crop** (`aspect_crop`, null at +0.78pt / 3 seeds — the top model-side lever, now
 closed; flag kept off by default).
 
-State at session end: reference **0.7496** (`p6-ref-26` / `p7-ref-26-s42`,
-defaults on index-grouped folds — the number to pair against; 3-seed spread
-0.7496/0.7387/0.7423). Best ever measured is 0.7586 (`p5-ref-32`) but on
-superseded folds; the old 0.716 was the same config mismeasured. **No pending
-default changes remain**: the epoch horizon resolved flat and the `epochs`
-default is now 26 (`p9-ep32-s*`), and mask polarity confirmed the default
-(`p9-invmask-26-s*`). Tree clean, nothing running. The fold fixes and log
-rewrite are on `main`. The pose-variant subset code (`include_pose_variants`)
-is off by default and kept for the record though the result was null — enabling
-it reproduces the `p7-pose-26-s*` runs. The **aspect-crop** code (`aspect_crop`
-in `config.py`/`data.py`) is off by default; enabling it reproduces the
-`p8-crop-26-s*` runs. The next movers are all lower-prior model-side surgery
-(Phase 4 sketch checkpoints; Phase 5 depth / optimizer / weight-decay sweeps),
-each likely below single-run resolution — budget them as multi-seed batteries.
+State at session end (2026-07-22): reference **0.7496** (`p6-ref-26` /
+`p7-ref-26-s42`, defaults on index-grouped folds — the number to pair against;
+3-seed spread 0.7496/0.7387/0.7423). Best ever measured is 0.7586 (`p5-ref-32`)
+but on superseded folds; the old 0.716 was the same config mismeasured. **No
+pending default changes remain**: the epoch horizon resolved flat and the
+`epochs` default is now 26 (`p9-ep32-s*`), and mask polarity confirmed the
+default (`p9-invmask-26-s*`). Tree clean, nothing running; everything below is on
+`main`. The pose-variant subset code (`include_pose_variants`) and the
+**aspect-crop** code (`aspect_crop`) are both off by default and kept for the
+record though their results were null — enabling them reproduces the
+`p7-pose-26-s*` / `p8-crop-26-s*` runs. The **classical shape-descriptor floor**
+(`scripts/shape_descriptor_baseline.py`, ~0.285 OOF) is done and sets the bar any
+silhouette-native architecture must clear. The next movers are all lower-prior
+model-side surgery (Phase 4 sketch checkpoints; Phase 5 depth / optimizer /
+weight-decay sweeps), each likely below single-run resolution — budget them as
+multi-seed batteries.
 
 ## Phase 1 — Third channel: edge filtering
 
