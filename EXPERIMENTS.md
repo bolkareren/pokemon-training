@@ -89,6 +89,7 @@ and none of its numbers are comparable to anything here.
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
 | does more data help (pose variants, clean test)? | **no — data lever closed.** Adding the 148 animated-frame pose variants to training (truly paired: same scored images, 0 leakage) gives **+0.81pt mean over 3 seeds** — all three positive (+1.35/+0.90/+0.18) but pooled 15-fold paired t=1.11 p=0.28, McNemar +27 net p=0.20, **well under the 2× bar**. This is the clean version of the leak-decomposition question (no leakage, no step-count confound), so the +2.1pt there was mostly non-reproducible: soft-leakage + budget, not novel-data value. Two independent angles now say scraping more data is a weak lever; `exclude_shiny=True` stands. `include_pose_variants` flag kept for the record | p7-ref-26-s*, p7-pose-26-s* |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
+| classical shape-descriptor floor? | **~0.285 OOF — the CNN wins by ~46pt.** Normalized elliptic Fourier (20 harmonics) + log Hu moments + 6 dimensionless ratios → shallow classifier (random forest best of logreg/SVM/RF), same seed-42 split as `p7-ref-26-s42` (byte-identical OOF set). Orientation-preserving EFD (canonical sprite pose kept as signal) beats fully rotation-invariant by +1.8pt OOF / +7.6pt test: **0.2847 OOF / 0.3807 test** vs 0.2667 / 0.3046. ~43× chance, so global shape carries real signal, but the CNN's 0.7496 comes overwhelmingly from learned local/fine structure, not gross silhouette form. Gap ~30× the fold SEM → one seed settles it. Sets the floor any silhouette-native architecture must clear decisively | sd-efd{inv,orient}-random_forest-s42 |
 | does filling the canvas help (aspect crop)? | **no — the top model-side lever closed too.** Bbox-crop + pad to fill the 224 canvas (occupancy ~25% → near-full), truly paired 3-seed vs `p7-ref-26-s*`: **+0.78pt mean** (+1.89/+0.99/−0.54), 15-fold paired t=1.13 p=0.28, McNemar 250 fixed / 224 broke net +26 p=0.25 — **under the 2× bar (1.95pt)**. s42 alone was +1.89pt (reads as a clear win); the 3-seed battery caught it — the power-check working. Third lever to land ~+0.8pt sub-bar after pose variants and leak-decomposition, and the first that is purely architecture/framing rather than data. `aspect_crop` flag kept, off by default | p8-crop-26-s* |
 
 **Current reference: 0.7496** (`p6-ref-26`, the config defaults at seed 42 on
@@ -378,6 +379,16 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
       bar. Same sub-bar ~+0.8pt as the pose-variant and leak-decomposition
       results. Flag kept, off by default.
 - [ ] **backbone re-check** — resnet18 vs 50 was 1.9× SEM, just under the bar.
+- [x] **classical shape-descriptor floor** — done, **~0.285 OOF vs the CNN's
+      0.7496 (~46pt gap).** `scripts/shape_descriptor_baseline.py`: normalized
+      elliptic Fourier + log Hu moments + dimensionless ratios → shallow
+      classifier, reusing `fold_indices` so the seed-42 OOF set is byte-identical
+      to `p7-ref-26-s42`. Orientation-preserving EFD (canonical pose kept) is the
+      better floor (+1.8pt OOF / +7.6pt test over fully rotation-invariant). ~43×
+      chance, so global shape has real signal, but the network's win is
+      overwhelmingly learned local/fine structure. The gap is ~30× the fold SEM,
+      so seed 42 alone settles it. This is the number a silhouette-native
+      architecture (contour-Transformer, etc.) must clear decisively to matter.
 - [ ] **confusion-study leftovers** — body-plan-aware descriptor, error rate
       by generation (+ generation-held-out split), cross-class near-duplicate
       check, embedding visualization, hard-example contact sheet.
