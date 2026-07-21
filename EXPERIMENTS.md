@@ -149,7 +149,21 @@ Also measured, and load-bearing:
 
 - **Models are high-variance**: five ~equal configs agree on only 75-82% of
   predictions; 230 of 1110 images are solved by no config, 880 by at least one.
-  Real ensemble headroom — deliberately deferred to Phase 6.
+  Real ensemble headroom — deliberately deferred to Phase 6. Refreshed on the
+  three 26-epoch reference seeds (`scripts/seed_agreement_study.py`, over the 797
+  images out-of-fold in all three — the seeds don't share a split): pairwise
+  top-1 agreement 70-73% (when two agree, ~91% correct); all three agree on 63%
+  (95% correct there); 60% solved by all three, 14.7% by none; **85.3% solved by
+  ≥1 seed vs 74.2% best single** — the ~11pt ensemble headroom, still there.
+- **Why silhouettes get confused** (same script, 631 pooled errors, each factor's
+  rate vs its chance baseline): **same evolution line is the one sharp driver —
+  10.9% of errors at 13.1× chance**; similar shape (IoU>0.8) 2.8×, shares a type
+  2.3×, similar size only 1.4× (confused pairs' mean occupancy gap 1.27× closer
+  than random). Family/type/shape tags together explain just 43.7% of errors; the
+  other **56% are collisions between unrelated Pokemon** whose renderings happen
+  to overlap — reinforcing the floor study's read that the residual is fine local
+  structure, not gross shape/type/size categories. Size being the weakest factor
+  matches N1 and the aspect-crop null.
 - **Sprite scale mixes artifact with signal** (generation canvas vs real size,
   same ~2× magnitude, so they cancel). Normalising it away via generation
   metadata was built and removed as a shortcut; size is near-useless as a cue
