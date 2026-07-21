@@ -21,8 +21,9 @@ class ExperimentConfig:
 	exclude_shiny: bool = True
 	# Add the 148 animated-frame pose variants (not the 705 exact recolours) to
 	# training only, paired to their normal partner's fold. Requires
-	# exclude_shiny=True; scored images stay identical to the baseline. Fold mode
-	# only. See EXPERIMENTS.md "Known data issues".
+	# exclude_shiny=True; scored images stay identical to the baseline. Takes
+	# effect only in fold mode (folds > 0); the single-split path rejects it
+	# rather than silently ignore it. See EXPERIMENTS.md "Known data issues".
 	include_pose_variants: bool = False
 	# 0 = single split (validation_accuracy). K > 0 = grouped CV pooled over
 	# out-of-fold predictions (oof_accuracy); --folds 5 is the reporting standard.

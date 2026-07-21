@@ -427,11 +427,12 @@ def create_fold_data_loaders(
 	untouched. Each fold is (train_loader, val_loader, val_idx), val_idx
 	addressing the base dataset so out-of-fold predictions trace to images.
 
-	`include_pose_variants` adds the 148 animated-frame shiny sprites to the
+	`include_pose_variants` appends the 148 animated-frame shiny sprites to the
 	*training* side of each fold, but only where their normal partner is already
-	in that fold's train split - so the normal folds (and thus every scored
-	image) stay byte-identical to the exclude_shiny baseline, the comparison is
-	truly paired, and no variant sits opposite its near-identical partner.
+	in that fold's train split. It changes the training set by design; what is
+	held invariant is the scored data: the test split and the normal train/val
+	partition are byte-identical to the exclude_shiny baseline, so the comparison
+	is truly paired and no variant ever sits opposite its near-identical partner.
 	"""
 	if include_pose_variants and not exclude_shiny:
 		raise ValueError("include_pose_variants requires exclude_shiny=True")

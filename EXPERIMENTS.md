@@ -235,9 +235,9 @@ defaults on index-grouped folds — the number to pair against; 3-seed spread
 superseded folds; the old 0.716 was the same config mismeasured. No pending
 default changes except the epoch horizon (26 vs 32), which is gated on its
 seed-43/44 runs above. Tree clean, nothing running. The fold fixes and log
-rewrite are on `main` (pushed). The pose-variant subset code
-(`include_pose_variants`) is on branch `experiment/pose-variants`, **unpushed** —
-sound and verified, kept for the record though the result was null.
+rewrite are on `main`. The pose-variant subset code (`include_pose_variants`)
+lands with this change; it is off by default and kept for the record though the
+result was null — enabling it reproduces the `p7-pose-26-s*` runs.
 
 ## Phase 1 — Third channel: edge filtering
 

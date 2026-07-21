@@ -215,6 +215,10 @@ def main(config: ExperimentConfig) -> None:
 			mlflow.log_dict({"classes": classes, "predictions": oof}, "oof_predictions.json")
 			history = None
 			model = None
+		elif config.include_pose_variants:
+			# The single-split path has no pose-variant plumbing; running here
+			# would silently ignore the flag and mislabel the MLflow run.
+			raise ValueError("include_pose_variants requires fold mode (--folds > 0)")
 		else:
 			train_loader, val_loader, test_loader, classes = create_data_loaders(
 				data_dir=data_dir,
