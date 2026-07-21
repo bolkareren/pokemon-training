@@ -78,12 +78,12 @@ and none of its numbers are comparable to anything here.
 | does added augmentation help? | no; elastic is significantly harmful (−4.9pt, 2.1× SEM) on contour-only input | c7-* |
 | does removing augmentation help? | no; nothing clears the bar, scale jitter removal moves nothing → size cue not load-bearing; augmentation closed in both directions | n1-* |
 | is the error irreducible? | no — silhouette collisions explain ~3% of errors (electrode/voltorb IoU 0.969 is the max); evolution-line confusions are 12.7% of errors at 15× chance | confusion study |
-| mask polarity? | ⚠ **weakened**: was ~3pt at 2 seeds; on corrected folds only −1.27pt at **0.78× SEM** (0.7586 vs 0.7459), i.e. not significant. Direction still favours background = 1, so the default stands, but the effect is not established. One seed vs the original two — needs a second seed to resolve | n2-mask-inverted*, p5-invert-mask-32 |
+| mask polarity? | **resolved — default confirmed.** 3-seed paired battery on index folds: inverting the mask is **−1.50pt mean** (−2.16/+1.26/−3.60), 15-fold paired t=−2.00 p=0.066, **McNemar net −50 (183 fixed / 233 broke), p=0.016 — significant at image level**. Under the conservative 2×-OOF-SEM bar (2.68pt) but real-signed and significant per McNemar, and firmer than the old single-seed −1.27pt. Default `invert_mask=False` (background=1) stands | p9-invmask-26-s*, was p5-invert-mask-32 |
 | SDT input channel? | **consistent, not independently confirmed**. Original: +1.5pt over 4 paired seeds (t=2.86, p=0.01). On corrected folds, one paired seed gives **+1.08pt at 0.64× SEM** (3/5 folds, paired t=0.789 p=0.47; McNemar 66 fixed / 54 broken, p=0.32). That sits inside the original per-seed range (+0.4…+2.6), so it replicates in direction and magnitude but cannot confirm alone — **a +1.5pt effect is not detectable in a single run** (2× SEM ≈ 3.4pt here). Default stands; full re-confirmation needs 3 more paired seeds (~3h) | n2-*sdt*, p6-ref-26 vs p6-allmask-26 |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 | edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
 | LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4; the historical 4e-4 collapse was a warmup artifact. Effect is larger than the fold artifact, so likely robust — but see the horizon row, which did not survive | p2-* |
-| epoch horizon? | ⚠ **saturated, was overstated**: 26 and 32 epochs are within 0.1pt on corrected folds (0.7595 vs 0.7586). Phase 2 recorded the 32-epoch horizon as "genuinely used" (best epochs to 28); that was a fold artifact. 26 epochs is ~20% cheaper for the same result — default not yet changed, wants a second seed | p5-ref-26-stepmatched, p5-ref-32 |
+| epoch horizon? | **resolved — flat, default flipped 32 → 26.** 3-seed paired battery on index folds: 32ep is **+0.45pt over 26ep** (+1.71/+0.63/−0.99), 15-fold paired t=0.83 p=0.42, McNemar net +15 p=0.40 — indistinguishable. The seed-42 +1.71pt washed out across seeds (the single-seed mirage again). Per the pre-registered rule, **`epochs` default lowered to 26** for ~20% cheaper runs at the same accuracy | p9-ep32-s*, p7-ref-26-s* |
 | higher backbone LR? | no — blr 8e-4 is +0.4pt at 0.3× SEM; the LR ceiling does not extend past 4e-4. Phase 2 schedule residue closed on this axis | p5-blr8e4 |
 | duplicate-mask hypothesis? | no — `(sdt, mask, sdt)` is −1.2pt at 0.6× SEM; the second raw mask copy in `(mask, sdt, mask)` is not load-bearing. Phase 1's open question resolved | p5-dupmask-sdt-mask-sdt |
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
@@ -190,28 +190,21 @@ came back null: +0.78pt mean** (+1.89/+0.99/−0.54), paired t=1.13 p=0.28,
 McNemar net +26 p=0.25, under the 1.95pt bar. That is *three* levers now
 (pose variants, leak decomposition, crop) landing ~+0.8pt sub-bar — the data
 axis was already exhausted and the top framing lever is too. What remains is
-lower-prior model-side surgery. In priority order:
+lower-prior model-side surgery. The two weakened ⚠ rows are now also resolved
+(3-seed `p9-*` batteries): **mask polarity confirmed** the default (inverting
+is −1.5pt, McNemar p=0.016) and the **epoch horizon is flat** (32 vs 26 is
++0.45pt, p=0.42), so the `epochs` default is lowered 32 → 26. No pending default
+changes remain. In priority order:
 
-1. **Second and third seeds on the two weakened ⚠ results** — cheap, and they
-   close rows that should not sit unresolved:
-   - **Mask polarity**: `p5-invert-mask-32` (seed 42) was the only corrected-fold
-     point, at −1.27pt / 0.78× SEM. Run `--invert-mask` at seeds 43 and 44
-     (26ep, index folds), paired against `p7-ref-26-s43/s44`, to get a 3-seed
-     read like the pose battery. Expectation: confirms the default (background=1)
-     but as a small effect, not the ~3pt originally claimed.
-   - **Epoch horizon**: 26 vs 32 was within 0.1pt at seed 42 only. Run `--epochs
-     32` at seeds 43 and 44 against `p7-ref-26-s43/s44`. If it stays flat across
-     3 seeds, **flip the default to `epochs=26`** (~20% cheaper per run) — the
-     one pending default change, gated on this.
-2. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
+1. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
    sketch/quickdraw checkpoint; the loading-order fix in
    `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
    Expectations stay low (the shape-biased precedent lost 5.7pt).
-3. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
+2. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
    (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
    All are cheap, and all are **likely below single-run resolution** — plan
    them as multi-seed paired batteries or accept they will read as null.
-4. **Phase 6 last**, and not until the config stops moving: ensembling
+3. **Phase 6 last**, and not until the config stops moving: ensembling
    amplifies whatever config it is handed.
 
 Cleared, no longer worth running: `--backbone-lr 8e-4` (null), `(sdt, mask,
@@ -226,16 +219,17 @@ closed; flag kept off by default).
 State at session end: reference **0.7496** (`p6-ref-26` / `p7-ref-26-s42`,
 defaults on index-grouped folds — the number to pair against; 3-seed spread
 0.7496/0.7387/0.7423). Best ever measured is 0.7586 (`p5-ref-32`) but on
-superseded folds; the old 0.716 was the same config mismeasured. No pending
-default changes except the epoch horizon (26 vs 32), which is gated on its
-seed-43/44 runs above. Tree clean, nothing running. The fold fixes and log
+superseded folds; the old 0.716 was the same config mismeasured. **No pending
+default changes remain**: the epoch horizon resolved flat and the `epochs`
+default is now 26 (`p9-ep32-s*`), and mask polarity confirmed the default
+(`p9-invmask-26-s*`). Tree clean, nothing running. The fold fixes and log
 rewrite are on `main`. The pose-variant subset code (`include_pose_variants`)
 is off by default and kept for the record though the result was null — enabling
 it reproduces the `p7-pose-26-s*` runs. The **aspect-crop** code (`aspect_crop`
-in `config.py`/`data.py`) lands with this change, off by default; enabling it
-reproduces the `p8-crop-26-s*` runs. Both remaining roadmap movers are the
-seed-43/44 batteries (mask polarity, epoch horizon) — the last-cheap items
-before the config work turns to lower-prior model-side surgery.
+in `config.py`/`data.py`) is off by default; enabling it reproduces the
+`p8-crop-26-s*` runs. The next movers are all lower-prior model-side surgery
+(Phase 4 sketch checkpoints; Phase 5 depth / optimizer / weight-decay sweeps),
+each likely below single-run resolution — budget them as multi-seed batteries.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -305,9 +299,13 @@ Second seed: p2-blr4e-4-seed43 +2.4pt, **p2-blr4e4-32-seed43 0.707, +4.1pt**
   targeted that mechanism.
 
 **Defaults flipped** (evidence above): `scheduler="cosine"`,
-`restore_best_epoch=True`, `backbone_lr=4e-4`, `epochs=32`. A default run now
-takes ~40 min. Untested residue for Phase 5: warmup length, higher LRs (8e-4),
-longer horizons (64).
+`restore_best_epoch=True`, `backbone_lr=4e-4`, `epochs=32`. Untested residue for
+Phase 5: warmup length, higher LRs (8e-4), longer horizons (64).
+
+> **Horizon superseded, 2026-07-21.** The 3-seed `p9-ep32-s*` battery on index
+> folds found 32ep only +0.45pt over 26ep (paired t p=0.42, McNemar p=0.40) —
+> flat. The `epochs` default is now **26** (~20% cheaper per run); the "horizon
+> is genuinely used" bullet above was measured on the superseded IoU folds.
 
 Metric note: `fold_gap` for runs up to and including `p3-nomaxpool` was
 measured at the *final* epoch; later runs measure it at the epoch actually

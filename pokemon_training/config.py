@@ -89,9 +89,11 @@ class ExperimentConfig:
 	label_smoothing: float = 0.2
 
 	# Training loop. `epochs` is a fixed budget and, under the cosine scheduler,
-	# the schedule horizon - there is no early exit. The cosine + restore + 32
-	# defaults are the Phase 2 winner, confirmed at two seeds.
-	epochs: int = 32
+	# the schedule horizon - there is no early exit. The cosine + restore
+	# schedule is the Phase 2 winner (confirmed at two seeds). Horizon lowered
+	# 32 -> 26 after the p9 battery: 32ep is +0.45pt over 26 across 3 index-fold
+	# seeds (paired t p=0.42, McNemar p=0.40) - flat, so 26 for ~20% cheaper runs.
+	epochs: int = 26
 	# Restore the best-val-loss epoch's weights before scoring; False scores
 	# the final epoch (the historical behaviour).
 	restore_best_epoch: bool = True
