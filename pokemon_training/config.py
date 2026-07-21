@@ -54,6 +54,13 @@ class ExperimentConfig:
 	# winner); derived channels always treat the creature as inside.
 	invert_mask: bool = False
 
+	# Bbox-crop the creature and rescale to fill the canvas (aspect preserved via
+	# padding), applied at train and eval alike. Body occupancy averages ~25% of
+	# the canvas (7.2-48.5%), so this lifts small Pokemon to a comparable
+	# effective resolution and drops absolute size, a near-perfect generation
+	# proxy that N1 measured as ~useless as a cue. See EXPERIMENTS.md Phase 5.
+	aspect_crop: bool = False
+
 	# Single global seed: the split, all RNGs, and the train loader shuffle.
 	random_state: int = 42
 
@@ -112,4 +119,5 @@ class ExperimentConfig:
 			"affine_scale": self.affine_scale,
 			"input_channels": self.input_channels,
 			"invert_mask": self.invert_mask,
+			"aspect_crop": self.aspect_crop,
 		}

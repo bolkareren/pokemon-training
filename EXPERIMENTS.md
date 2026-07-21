@@ -89,6 +89,7 @@ and none of its numbers are comparable to anything here.
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
 | does more data help (pose variants, clean test)? | **no — data lever closed.** Adding the 148 animated-frame pose variants to training (truly paired: same scored images, 0 leakage) gives **+0.81pt mean over 3 seeds** — all three positive (+1.35/+0.90/+0.18) but pooled 15-fold paired t=1.11 p=0.28, McNemar +27 net p=0.20, **well under the 2× bar**. This is the clean version of the leak-decomposition question (no leakage, no step-count confound), so the +2.1pt there was mostly non-reproducible: soft-leakage + budget, not novel-data value. Two independent angles now say scraping more data is a weak lever; `exclude_shiny=True` stands. `include_pose_variants` flag kept for the record | p7-ref-26-s*, p7-pose-26-s* |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
+| does filling the canvas help (aspect crop)? | **no — the top model-side lever closed too.** Bbox-crop + pad to fill the 224 canvas (occupancy ~25% → near-full), truly paired 3-seed vs `p7-ref-26-s*`: **+0.78pt mean** (+1.89/+0.99/−0.54), 15-fold paired t=1.13 p=0.28, McNemar 250 fixed / 224 broke net +26 p=0.25 — **under the 2× bar (1.95pt)**. s42 alone was +1.89pt (reads as a clear win); the 3-seed battery caught it — the power-check working. Third lever to land ~+0.8pt sub-bar after pose variants and leak-decomposition, and the first that is purely architecture/framing rather than data. `aspect_crop` flag kept, off by default | p8-crop-26-s* |
 
 **Current reference: 0.7496** (`p6-ref-26`, the config defaults at seed 42 on
 index-grouped folds — **pair every new experiment against this**). The best
@@ -181,26 +182,17 @@ twice (once under each grouping), and four Phase 5 flag items were cleared.
 Re-validation is **done**: the baseline is re-established (`p6-ref-26`, 0.7496)
 and SDT replicated in direction and magnitude. The defaults are not disturbed.
 The pose-variant experiment then ran (3-seed paired, `p7-*`) and **closed the
-data lever**: +0.81pt mean, all seeds positive but well under the bar. So the
-data axis is exhausted from two angles, and what remains is model/representation
-side. In priority order:
+data lever**: +0.81pt mean, all seeds positive but well under the bar. The
+aspect-preserved crop — the roadmap's #1 item and "most likely real win" — then
+ran as a 3-seed paired battery (`p8-crop-26-s*` vs `p7-ref-26-s*`, fold
+membership byte-identical since crop is a pure load-time transform) and **also
+came back null: +0.78pt mean** (+1.89/+0.99/−0.54), paired t=1.13 p=0.28,
+McNemar net +26 p=0.25, under the 1.95pt bar. That is *three* levers now
+(pose variants, leak decomposition, crop) landing ~+0.8pt sub-bar — the data
+axis was already exhausted and the top framing lever is too. What remains is
+lower-prior model-side surgery. In priority order:
 
-1. **Aspect-preserved crop** (Phase 5) — now the top item and the most likely
-   real win left, all of it model-side. Motivation was measured this session:
-   body occupancy averages **24.9%** of the canvas, range 7.2% (magnemite) to
-   48.5% (venusaur), so ~3/4 of every image is empty and small Pokémon train at
-   far lower effective resolution than large ones. Bbox-crop + pad also removes
-   absolute size, the near-perfect generation proxy the "no metadata shortcuts"
-   rule exists to keep out (N1 measured size as ~useless as a cue, so this
-   should be close to free). `scripts/confusion_study.py` already has the crop
-   helper to lift.
-   - **Run it as a 3-seed paired battery from the start** (`p8-ref-26-s{42,43,44}`
-     vs `p8-crop-26-s{42,43,44}`, mirror `scratchpad/battery.sh`). This session
-     proved single-run tests at ~3.4pt resolution are useless; do not waste a
-     one-run peek. Reuse `p7-ref-26-s*` as the baseline arm only if the crop is
-     implemented as a pure eval/train transform that leaves fold membership
-     byte-identical — otherwise re-run matched baselines.
-2. **Second and third seeds on the two weakened ⚠ results** — cheap, and they
+1. **Second and third seeds on the two weakened ⚠ results** — cheap, and they
    close rows that should not sit unresolved:
    - **Mask polarity**: `p5-invert-mask-32` (seed 42) was the only corrected-fold
      point, at −1.27pt / 0.78× SEM. Run `--invert-mask` at seeds 43 and 44
@@ -211,23 +203,25 @@ side. In priority order:
      32` at seeds 43 and 44 against `p7-ref-26-s43/s44`. If it stays flat across
      3 seeds, **flip the default to `epochs=26`** (~20% cheaper per run) — the
      one pending default change, gated on this.
-3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
+2. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
    sketch/quickdraw checkpoint; the loading-order fix in
    `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
    Expectations stay low (the shape-biased precedent lost 5.7pt).
-4. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
+3. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
    (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
    All are cheap, and all are **likely below single-run resolution** — plan
    them as multi-seed paired batteries or accept they will read as null.
-5. **Phase 6 last**, and not until the config stops moving: ensembling
+4. **Phase 6 last**, and not until the config stops moving: ensembling
    amplifies whatever config it is handed.
 
 Cleared, no longer worth running: `--backbone-lr 8e-4` (null), `(sdt, mask,
 sdt)` duplicate-mask hypothesis (null), the leak decomposition (superseded by
 the clean pose-variant test), the 64-epoch horizon (pointless — 32 already
-buys nothing over 26), and **data expansion / all-gen scraping** (the data
+buys nothing over 26), **data expansion / all-gen scraping** (the data
 lever is closed: pose variants gave +0.81pt at 3 seeds, and that is the clean
-upper bound on novel-silhouette value at this scale).
+upper bound on novel-silhouette value at this scale), and the **aspect-preserved
+crop** (`aspect_crop`, null at +0.78pt / 3 seeds — the top model-side lever, now
+closed; flag kept off by default).
 
 State at session end: reference **0.7496** (`p6-ref-26` / `p7-ref-26-s42`,
 defaults on index-grouped folds — the number to pair against; 3-seed spread
@@ -236,8 +230,12 @@ superseded folds; the old 0.716 was the same config mismeasured. No pending
 default changes except the epoch horizon (26 vs 32), which is gated on its
 seed-43/44 runs above. Tree clean, nothing running. The fold fixes and log
 rewrite are on `main`. The pose-variant subset code (`include_pose_variants`)
-lands with this change; it is off by default and kept for the record though the
-result was null — enabling it reproduces the `p7-pose-26-s*` runs.
+is off by default and kept for the record though the result was null — enabling
+it reproduces the `p7-pose-26-s*` runs. The **aspect-crop** code (`aspect_crop`
+in `config.py`/`data.py`) lands with this change, off by default; enabling it
+reproduces the `p8-crop-26-s*` runs. Both remaining roadmap movers are the
+seed-43/44 batteries (mask polarity, epoch horizon) — the last-cheap items
+before the config work turns to lower-prior model-side surgery.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -372,12 +370,15 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
 - [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
       winning `(mask, sdt, mask)` load-bearing? Channel-position swaps,
       e.g. `(sdt, mask, sdt)`. See the Phase 1 pattern note.
-- [ ] **aspect-preserved crop** — **promoted to the top of the queue**, see
-      "Next session". Bbox-crop + pad; resolution gain at a size cost N1
-      measured as ~zero. Occupancy was quantified 2026-07-20: mean 24.9% of
-      canvas, range 7.2-48.5%, so ~3/4 of every image is empty and small
-      Pokémon train at far lower effective resolution than large ones. Crop
-      helper already exists in `scripts/confusion_study.py`.
+- [x] **aspect-preserved crop** — **null, closed.** Bbox-crop + pad to fill the
+      224 canvas (`aspect_crop` in `data.py`, polarity-robust), applied at train
+      and eval alike. Lifts occupancy from mean 24.9% (range 7.2-48.5%) to
+      near-full, and removes absolute size (the generation proxy N1 measured as
+      ~useless). 3-seed paired battery `p8-crop-26-s*` vs `p7-ref-26-s*`
+      (fold-identical): **+0.78pt mean** (+1.89/+0.99/−0.54), paired t=1.13
+      p=0.28, McNemar 250 fixed / 224 broke net +26 p=0.25 — under the 1.95pt
+      bar. Same sub-bar ~+0.8pt as the pose-variant and leak-decomposition
+      results. Flag kept, off by default.
 - [ ] **backbone re-check** — resnet18 vs 50 was 1.9× SEM, just under the bar.
 - [ ] **confusion-study leftovers** — body-plan-aware descriptor, error rate
       by generation (+ generation-held-out split), cross-class near-duplicate
