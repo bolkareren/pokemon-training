@@ -201,14 +201,12 @@ mean, paired t p=0.28 / McNemar p=0.25); **mask polarity confirmed** the default
 +0.45pt p=0.42) so the `epochs` default is now 26. A **classical shape-descriptor
 floor** was measured at **~0.285 OOF** (46pt below the CNN): global shape carries
 real but limited signal, so the network's win is learned local/fine structure.
-**No pending default changes remain.** What's left is lower-prior model-side
-surgery, in priority order:
+Phase 4 was then run as a **DINOv2 frozen-feature probe** (not the sketch swap)
+and **closed**: 0.618 OOF, +33pt over the floor but −13pt vs the CNN — strong
+frozen transfer, but fine-tuning still wins. **No pending default changes
+remain.** What's left is lower-prior model-side surgery, in priority order:
 
-1. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
-   sketch/quickdraw checkpoint; the loading-order fix in
-   `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
-   Expectations stay low (the shape-biased precedent lost 5.7pt).
-2. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
+1. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
    (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
    All are cheap, and all are **likely below single-run resolution** — plan
    them as multi-seed paired batteries or accept they will read as null.
@@ -216,7 +214,11 @@ surgery, in priority order:
      (contour-sequence / point model over the boundary, vs the raster CNN).
      It must clear the ~0.285 descriptor floor decisively *and* approach the
      0.7496 CNN to matter; treat it as a research probe, not an expected win.
-3. **Phase 6 last**, and not until the config stops moving: ensembling
+   - **End-to-end DINOv2 fine-tuning** is the one Phase-4 follow-up left on the
+     table (frozen probe got within 13pt): fine-tune last-N blocks of a ViT-S/B
+     on the same split. Higher prior than the sketch swap but needs ViT backbone
+     integration and overfits easily at n=1110 — parked, not scheduled.
+2. **Phase 6 last**, and not until the config stops moving: ensembling
    amplifies whatever config it is handed.
 
 Cleared, no longer worth running: `--backbone-lr 8e-4` (null), `(sdt, mask,
@@ -364,7 +366,12 @@ sourcing problem.
       the fine-tuned CNN (0.7496). Raw silhouette input > (mask,sdt,mask) for
       frozen features (SDT is OOD for DINOv2's normalization). RF is the wrong
       probe for 2048-d embeddings (0.474, worst) — a ~15pt classifier swing vs
-      std+logreg. See the results-table row.
+      std+logreg. See the results-table row. A logreg scaler×C grid on both
+      caches confirmed the probe choice: silhouette peaks at std+logreg C≈1
+      (0.618), msm at none/std+logreg C≈1 (0.599, silhouette still wins); L2-norm
+      is a trap for logreg (collapses to ~5% at low C, needs C≈100). Well-chosen
+      linear probes all land ~0.59-0.62; the classifier, not more tuning, was the
+      lever.
 - [ ] **p4-sketch-checkpoint** — parked; only revisit if a credible ResNet-50
       sketch/QuickDraw checkpoint surfaces.
 - **Open ceiling test**: the probe is frozen+linear, so it is *not* a clean
