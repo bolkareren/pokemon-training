@@ -87,6 +87,7 @@ and none of its numbers are comparable to anything here.
 | higher backbone LR? | no — blr 8e-4 is +0.4pt at 0.3× SEM; the LR ceiling does not extend past 4e-4. Phase 2 schedule residue closed on this axis | p5-blr8e4 |
 | duplicate-mask hypothesis? | no — `(sdt, mask, sdt)` is −1.2pt at 0.6× SEM; the second raw mask copy in `(mask, sdt, mask)` is not load-bearing. Phase 1's open question resolved | p5-dupmask-sdt-mask-sdt |
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
+| does more data help (pose variants, clean test)? | **no — data lever closed.** Adding the 148 animated-frame pose variants to training (truly paired: same scored images, 0 leakage) gives **+0.81pt mean over 3 seeds** — all three positive (+1.35/+0.90/+0.18) but pooled 15-fold paired t=1.11 p=0.28, McNemar +27 net p=0.20, **well under the 2× bar**. This is the clean version of the leak-decomposition question (no leakage, no step-count confound), so the +2.1pt there was mostly non-reproducible: soft-leakage + budget, not novel-data value. Two independent angles now say scraping more data is a weak lever; `exclude_shiny=True` stands. `include_pose_variants` flag kept for the record | p7-ref-26-s*, p7-pose-26-s* |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
 
 **Current reference: 0.7496** (`p6-ref-26`, the config defaults at seed 42 on
@@ -103,13 +104,20 @@ at blr 4e-4:
 | `p5-ref-16` | IoU (superseded) | 16 | 0.7450 | 0.0118 |
 | `p5-ref-26-stepmatched` | IoU (superseded) | 26 | 0.7595 | 0.0121 |
 | `p5-ref-32` | IoU (superseded) | 32 | 0.7586 | 0.0154 |
-| **`p6-ref-26`** | **index (current)** | **26** | **0.7496** | **0.0155** |
+| **`p6-ref-26`** / `p7-ref-26-s42` | **index (current)** | **26** | **0.7496** | **0.0155** |
+| `p7-ref-26-s43` | index (current) | 26 | 0.7387 | — |
+| `p7-ref-26-s44` | index (current) | 26 | 0.7423 | — |
 
 **Pair only against `p6-ref-26`.** The three `p5-ref-*` runs are on IoU-grouped
 folds, which share ~21% of fold membership with index-grouped folds —
 effectively unrelated splits. They remain useful as evidence about the *size*
 of the fold artifact, not as comparison baselines. (`p6-ref-26` vs
 `p5-ref-26-stepmatched` is 0.7496 vs 0.7595: unpaired, ~1pt, noise.)
+
+The three index-grouped seeds give the honest baseline spread: **0.7496 /
+0.7387 / 0.7423, seed range ~1.1pt** — consistent with the ~±1pt seed variance
+noted in the protocol, and the reason single-seed comparisons at this effect
+size cannot resolve anything under ~3pt.
 
 **Single-run resolution is ~3.4pt.** Combined SEM against this reference is
 ~0.017, so the 2× bar is ~3.4pt — larger than *most* effects in the table
@@ -171,27 +179,38 @@ twice (once under each grouping), and four Phase 5 flag items were cleared.
 **The roadmap did not advance; the measuring instrument did.**
 
 Re-validation is **done**: the baseline is re-established (`p6-ref-26`, 0.7496)
-and SDT replicated in direction and magnitude. The defaults are not disturbed,
-so the roadmap resumes. In priority order:
+and SDT replicated in direction and magnitude. The defaults are not disturbed.
+The pose-variant experiment then ran (3-seed paired, `p7-*`) and **closed the
+data lever**: +0.81pt mean, all seeds positive but well under the bar. So the
+data axis is exhausted from two angles, and what remains is model/representation
+side. In priority order:
 
-1. **The 148-pose-variant run** — the sharpest version of the data question,
-   and it did not exist before this session. `exclude_shiny=True` drops all 853
-   shiny sprites, but **705 are exact duplicates and 148 are pose variants**
-   (different animation frames of the gen-5 sprite: genuinely different
-   silhouettes, same subject — see Known data issues). Training on normal + the
-   148 isolates novel-pose value with no duplicate contamination and no
-   step-count confound, unlike the leak decomposition which carries both. Needs
-   a small data.py change to admit a manifest-driven subset. This settles the
-   data lever more cheaply and far more cleanly than an all-gen scrape.
-2. **Aspect-preserved crop** (Phase 5) — promoted, because this session
-   measured the thing that motivates it: body occupancy averages **24.9%** of
-   the canvas and ranges 7.2% (magnemite) to 48.5% (venusaur). Roughly 3/4 of
-   every image is empty, and small Pokémon are effectively trained at far lower
-   resolution than large ones. Bbox-crop + pad also removes absolute size,
-   which is the near-perfect generation proxy the "no metadata shortcuts" rule
-   exists to keep out — N1 measured size as ~useless as a cue, so this should
-   be close to free. `scripts/confusion_study.py` already has the crop helper.
-   Plausibly the largest untested effect on the list.
+1. **Aspect-preserved crop** (Phase 5) — now the top item and the most likely
+   real win left, all of it model-side. Motivation was measured this session:
+   body occupancy averages **24.9%** of the canvas, range 7.2% (magnemite) to
+   48.5% (venusaur), so ~3/4 of every image is empty and small Pokémon train at
+   far lower effective resolution than large ones. Bbox-crop + pad also removes
+   absolute size, the near-perfect generation proxy the "no metadata shortcuts"
+   rule exists to keep out (N1 measured size as ~useless as a cue, so this
+   should be close to free). `scripts/confusion_study.py` already has the crop
+   helper to lift.
+   - **Run it as a 3-seed paired battery from the start** (`p8-ref-26-s{42,43,44}`
+     vs `p8-crop-26-s{42,43,44}`, mirror `scratchpad/battery.sh`). This session
+     proved single-run tests at ~3.4pt resolution are useless; do not waste a
+     one-run peek. Reuse `p7-ref-26-s*` as the baseline arm only if the crop is
+     implemented as a pure eval/train transform that leaves fold membership
+     byte-identical — otherwise re-run matched baselines.
+2. **Second and third seeds on the two weakened ⚠ results** — cheap, and they
+   close rows that should not sit unresolved:
+   - **Mask polarity**: `p5-invert-mask-32` (seed 42) was the only corrected-fold
+     point, at −1.27pt / 0.78× SEM. Run `--invert-mask` at seeds 43 and 44
+     (26ep, index folds), paired against `p7-ref-26-s43/s44`, to get a 3-seed
+     read like the pose battery. Expectation: confirms the default (background=1)
+     but as a small effect, not the ~3pt originally claimed.
+   - **Epoch horizon**: 26 vs 32 was within 0.1pt at seed 42 only. Run `--epochs
+     32` at seeds 43 and 44 against `p7-ref-26-s43/s44`. If it stays flat across
+     3 seeds, **flip the default to `epochs=26`** (~20% cheaper per run) — the
+     one pending default change, gated on this.
 3. **Phase 4 sketch checkpoints** — gated on finding a credible ResNet-50
    sketch/quickdraw checkpoint; the loading-order fix in
    `load_pretrained_model` (~5 lines) is needed for non-1000-class heads.
@@ -200,23 +219,25 @@ so the roadmap resumes. In priority order:
    (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
    All are cheap, and all are **likely below single-run resolution** — plan
    them as multi-seed paired batteries or accept they will read as null.
-5. **Second seeds on the two weakened results** — mask polarity (0.78× SEM)
-   and the 26-vs-32 horizon. Recorded as unresolved rather than overturned,
-   which is not a state to leave indefinitely, but neither blocks progress.
-6. **Phase 6 last**, and not until the config stops moving: ensembling
+5. **Phase 6 last**, and not until the config stops moving: ensembling
    amplifies whatever config it is handed.
 
-Cleared this session, no longer worth running: `--backbone-lr 8e-4` (null),
-`(sdt, mask, sdt)` duplicate-mask hypothesis (null), the leak decomposition
-itself (plausible but unconfirmed at 1.2× SEM), and the 64-epoch horizon
-(pointless — 32 already buys nothing over 26).
+Cleared, no longer worth running: `--backbone-lr 8e-4` (null), `(sdt, mask,
+sdt)` duplicate-mask hypothesis (null), the leak decomposition (superseded by
+the clean pose-variant test), the 64-epoch horizon (pointless — 32 already
+buys nothing over 26), and **data expansion / all-gen scraping** (the data
+lever is closed: pose variants gave +0.81pt at 3 seeds, and that is the clean
+upper bound on novel-silhouette value at this scale).
 
-State at session end: reference **0.7496** (`p6-ref-26`, defaults on
-index-grouped folds — the number to pair against). Best ever measured is
-0.7586 (`p5-ref-32`) but on superseded folds; the old 0.716 was the same
-config mismeasured. Tree clean, nothing running. Branch
-`fix/near-duplicate-mask-polarity` carries both fold fixes plus the log
-rewrite and is **unpushed**.
+State at session end: reference **0.7496** (`p6-ref-26` / `p7-ref-26-s42`,
+defaults on index-grouped folds — the number to pair against; 3-seed spread
+0.7496/0.7387/0.7423). Best ever measured is 0.7586 (`p5-ref-32`) but on
+superseded folds; the old 0.716 was the same config mismeasured. No pending
+default changes except the epoch horizon (26 vs 32), which is gated on its
+seed-43/44 runs above. Tree clean, nothing running. The fold fixes and log
+rewrite are on `main` (pushed). The pose-variant subset code
+(`include_pose_variants`) is on branch `experiment/pose-variants`, **unpushed** —
+sound and verified, kept for the record though the result was null.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -425,8 +446,11 @@ on the settled config:
     animated `image-5`/`image-6` partners, found only by index, not overlap.
 - **`exclude_shiny=True` discards 148 genuine pose variants** along with the 705
   duplicates it is meant to remove. Different animation frames are different
-  silhouettes of the same subject, which is plausibly useful training signal and
-  is not a duplicate in any sense that matters to a silhouette classifier. This
-  is the basis of the 148-pose-variant experiment in "Next session".
+  silhouettes of the same subject, not duplicates in any sense that matters to a
+  silhouette classifier. The `include_pose_variants` flag admits just those 148
+  (`_pose_variant_pairs` in data.py). Adding them to training was **tested and
+  gave +0.81pt at 3 seeds** — real-signed but under the bar, so the flag stays
+  off by default; see the results table. It remains the cleanest measurement of
+  novel-silhouette value at this scale.
 - Raw sprite size is a near-perfect generation proxy (56×56 Gen 1 … 128×128
   Gen 6+) — a shortcut to keep out of preprocessing.
