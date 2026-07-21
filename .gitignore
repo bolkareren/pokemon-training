@@ -11,3 +11,4 @@ data/*
 weights/*
 *.DS_Store
 .similarity-cache.npz
+.dinov2-cache/

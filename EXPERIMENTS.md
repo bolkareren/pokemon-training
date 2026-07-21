@@ -89,6 +89,7 @@ and none of its numbers are comparable to anything here.
 | does more data help (leak decomposition)? | **plausible, unconfirmed**: training on the full unfiltered set scores 0.7802 on the normal-series subset vs 0.7595 step-matched control — **+2.1pt at 1.2× SEM**, below the bar, and *unpaired* (different fold structures). Was +2.9pt under IoU grouping; ~0.8pt of that was animation-frame leakage. Does not justify the all-gen scrape yet | p5-leak-decomposition, p6-leak-idxgroup |
 | does more data help (pose variants, clean test)? | **no — data lever closed.** Adding the 148 animated-frame pose variants to training (truly paired: same scored images, 0 leakage) gives **+0.81pt mean over 3 seeds** — all three positive (+1.35/+0.90/+0.18) but pooled 15-fold paired t=1.11 p=0.28, McNemar +27 net p=0.20, **well under the 2× bar**. This is the clean version of the leak-decomposition question (no leakage, no step-count confound), so the +2.1pt there was mostly non-reproducible: soft-leakage + budget, not novel-data value. Two independent angles now say scraping more data is a weak lever; `exclude_shiny=True` stands. `include_pose_variants` flag kept for the record | p7-ref-26-s*, p7-pose-26-s* |
 | reduced-stride stem? | no — nomaxpool −0.8pt at 0.4× SEM for 2.8× compute; stride1 gated off; thin-feature hypothesis retired | p3-nomaxpool |
+| frozen DINOv2 features (Phase 4)? | **transfers well but doesn't beat fine-tuning: 0.618 OOF, ~13pt under the CNN.** Frozen DINOv2 ViT-L/14 @ 518 (CLS+meanpatch, 2048-d) → shallow probe, same seed-42 split as `p7-ref-26-s42`. Best is standardized **logistic regression 0.6180** (top5 0.804, test 0.675); raw silhouette input beats the (mask,sdt,mask) encoding (0.618 vs 0.589 — SDT is OOD for DINOv2's ImageNet normalization, the channel that helps the trainable CNN hurts frozen features). **+33pt over the classical floor, −13pt vs the CNN's 0.7496** (~5× SEM, solid). **Classifier choice swings ~15pt**: RF (the floor's winner) is *worst* here (0.474), std+logreg best — dense 2048-d embeddings need a linear probe, not axis-aligned trees. Caveat: frozen+linear vs fine-tuned, so not a clean pretraining comparison; end-to-end DINOv2 fine-tuning is the unrun ceiling test | dinov2L518-{silhouette,msm}-logreg-s42 |
 | classical shape-descriptor floor? | **~0.285 OOF — the CNN wins by ~46pt.** Normalized elliptic Fourier (20 harmonics) + log Hu moments + 6 dimensionless ratios → shallow classifier (random forest best of logreg/SVM/RF), same seed-42 split as `p7-ref-26-s42` (byte-identical OOF set). Orientation-preserving EFD (canonical sprite pose kept as signal) beats fully rotation-invariant by +1.8pt OOF / +7.6pt test: **0.2847 OOF / 0.3807 test** vs 0.2667 / 0.3046. ~43× chance, so global shape carries real signal, but the CNN's 0.7496 comes overwhelmingly from learned local/fine structure, not gross silhouette form. Gap ~30× the fold SEM → one seed settles it. Sets the floor any silhouette-native architecture must clear decisively | sd-efd{inv,orient}-random_forest-s42 |
 | does filling the canvas help (aspect crop)? | **no — the top model-side lever closed too.** Bbox-crop + pad to fill the 224 canvas (occupancy ~25% → near-full), truly paired 3-seed vs `p7-ref-26-s*`: **+0.78pt mean** (+1.89/+0.99/−0.54), 15-fold paired t=1.13 p=0.28, McNemar 250 fixed / 224 broke net +26 p=0.25 — **under the 2× bar (1.95pt)**. s42 alone was +1.89pt (reads as a clear win); the 3-seed battery caught it — the power-check working. Third lever to land ~+0.8pt sub-bar after pose variants and leak-decomposition, and the first that is purely architecture/framing rather than data. `aspect_crop` flag kept, off by default | p8-crop-26-s* |
 
@@ -347,22 +348,32 @@ contour detail. Whatever separates 0.72 from the ceiling lives elsewhere —
 consistent with the diversity measurement (high variance in *what* gets
 learned) pointing at data quantity, which the leak decomposition tests next.
 
-## Phase 4 — Sketch-pretrained backbones (+ edge)
+## Phase 4 — Non-ImageNet / domain-matched representations
 
-Checkpoint-swap protocol, exactly like the C2 comparison. Expectations
-deliberately low: the shape-biased (Stylized-ImageNet) checkpoint was this
-idea's precedent and lost by 5.7pt; sketches are strokes, silhouettes are
-filled regions; community checkpoints trade ImageNet's scale for a partial
-domain match.
+Original plan was a sketch/QuickDraw checkpoint swap. That was **deprioritized**
+in favour of a DINOv2 frozen-feature probe (2026-07-22): the sketch idea is
+low-prior (its precedent, the shape-biased Stylized-ImageNet checkpoint, lost
+5.7pt; sketches are strokes, silhouettes filled regions) *and* blocked on
+sourcing a credible ResNet-50 checkpoint. DINOv2 answers the more general
+"does a strong non-ImageNet representation transfer to silhouettes?" with no
+sourcing problem.
 
-- [ ] **p4-sketch-checkpoint** — one credible sketch/QuickDraw-pretrained
-      backbone, best input channels from Phases 1-3, one run.
-- [ ] **p4-sketch-edge** — same checkpoint with the edge channel: a stroke-
-      pretrained network sees contours natively, so edge may interact.
-- The stronger domain-matched alternative if this fails: pretrain on all-gen
-  Pokémon silhouettes (~900 classes beyond Gen 1, scrapable with the existing
-  pipeline) — gated on the leak-decomposition item in Phase 5 saying data
-  quantity matters.
+- [x] **dinov2-frozen-probe** — `scripts/dinov2_probe.py`, frozen DINOv2
+      ViT-L/14 @ 518 (CLS+meanpatch) → shallow probe on the seed-42 split.
+      **0.618 OOF** (std+logreg), +33pt over the classical floor but −13pt vs
+      the fine-tuned CNN (0.7496). Raw silhouette input > (mask,sdt,mask) for
+      frozen features (SDT is OOD for DINOv2's normalization). RF is the wrong
+      probe for 2048-d embeddings (0.474, worst) — a ~15pt classifier swing vs
+      std+logreg. See the results-table row.
+- [ ] **p4-sketch-checkpoint** — parked; only revisit if a credible ResNet-50
+      sketch/QuickDraw checkpoint surfaces.
+- **Open ceiling test**: the probe is frozen+linear, so it is *not* a clean
+  pretraining comparison. End-to-end **fine-tuning DINOv2** (last-N blocks on a
+  ViT-S/B to avoid overfitting 1110 images) is the unrun experiment that would
+  say whether a stronger backbone can beat the ResNet-50 — heavier, real prior.
+- The stronger domain-matched alternative if pursued: pretrain on all-gen
+  Pokémon silhouettes — but the data lever is closed (pose variants +0.81pt),
+  so this is low-prior now.
 
 ## Phase 5 — Backlog: everything never rigorously tested
 
