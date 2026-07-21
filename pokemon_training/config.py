@@ -54,6 +54,13 @@ class ExperimentConfig:
 	# winner); derived channels always treat the creature as inside.
 	invert_mask: bool = False
 
+	# Bbox-crop the creature and rescale to fill the canvas (aspect preserved via
+	# padding), applied at train and eval alike. Body occupancy averages ~25% of
+	# the canvas (7.2-48.5%), so this lifts small Pokemon to a comparable
+	# effective resolution and drops absolute size, a near-perfect generation
+	# proxy that N1 measured as ~useless as a cue. See EXPERIMENTS.md Phase 5.
+	aspect_crop: bool = False
+
 	# Single global seed: the split, all RNGs, and the train loader shuffle.
 	random_state: int = 42
 
@@ -82,9 +89,11 @@ class ExperimentConfig:
 	label_smoothing: float = 0.2
 
 	# Training loop. `epochs` is a fixed budget and, under the cosine scheduler,
-	# the schedule horizon - there is no early exit. The cosine + restore + 32
-	# defaults are the Phase 2 winner, confirmed at two seeds.
-	epochs: int = 32
+	# the schedule horizon - there is no early exit. The cosine + restore
+	# schedule is the Phase 2 winner (confirmed at two seeds). Horizon lowered
+	# 32 -> 26 after the p9 battery: 32ep is +0.45pt over 26 across 3 index-fold
+	# seeds (paired t p=0.42, McNemar p=0.40) - flat, so 26 for ~20% cheaper runs.
+	epochs: int = 26
 	# Restore the best-val-loss epoch's weights before scoring; False scores
 	# the final epoch (the historical behaviour).
 	restore_best_epoch: bool = True
@@ -112,4 +121,5 @@ class ExperimentConfig:
 			"affine_scale": self.affine_scale,
 			"input_channels": self.input_channels,
 			"invert_mask": self.invert_mask,
+			"aspect_crop": self.aspect_crop,
 		}
