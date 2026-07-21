@@ -19,10 +19,17 @@ class ExperimentConfig:
 	# Shiny sprites are recolours whose silhouettes duplicate the normal series;
 	# keeping them leaks pixel-identical twins across splits.
 	exclude_shiny: bool = True
+	# Add the 148 animated-frame pose variants (not the 705 exact recolours) to
+	# training only, paired to their normal partner's fold. Requires
+	# exclude_shiny=True; scored images stay identical to the baseline. Takes
+	# effect only in fold mode (folds > 0); the single-split path rejects it
+	# rather than silently ignore it. See EXPERIMENTS.md "Known data issues".
+	include_pose_variants: bool = False
 	# 0 = single split (validation_accuracy). K > 0 = grouped CV pooled over
 	# out-of-fold predictions (oof_accuracy); --folds 5 is the reporting standard.
 	folds: int = 0
-	# Keep near-duplicate silhouettes (IoU > 0.97) within a single fold.
+	# Pair each shiny sprite with the normal it recolours (by index) so the two
+	# never straddle a fold.
 	group_aware_folds: bool = True
 
 	# Augmentations, independently togglable; the RandomAffine below is always on.

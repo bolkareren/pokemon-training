@@ -249,6 +249,46 @@ def _normal_sprite_indices(dataset):
 	return np.array(keep)
 
 
+def _pose_variant_pairs(dataset, min_diff_px=10):
+	"""(variant_idx, partner_normal_idx) for shiny sprites that are animation-frame
+	pose variants of their index-paired normal rather than exact recolours.
+
+	Pairing is by index (normal number = shiny - shiny_start + 1, from image-1
+	since image-0 predates shinies). A pair is a variant when the two silhouettes
+	differ by more than `min_diff_px` pixels: exact recolours differ by <=2px
+	(threshold/antialias residue), real variants by >=22px, so any cut in the gap
+	selects the same 148 (all at the animated gen-5 image-5, three at image-6).
+	See EXPERIMENTS.md "Known data issues".
+	"""
+	shiny_start = json.loads(SHINY_MANIFEST_PATH.read_text())
+	targets = np.array(dataset.targets)
+
+	# class name -> {sprite number: dataset index}
+	by_class = {}
+	for i in range(len(dataset.samples)):
+		match = re.fullmatch(r"image-(\d+)\.png", Path(dataset.samples[i][0]).name)
+		if match is None:
+			continue
+		by_class.setdefault(dataset.classes[targets[i]], {})[int(match.group(1))] = i
+
+	def mask(i):
+		with Image.open(dataset.samples[i][0]) as image:
+			return np.array(image.convert("L")) <= 127
+
+	pairs = []
+	for name, sprites in by_class.items():
+		start = shiny_start[name]
+		for number, idx in sprites.items():
+			if number < start:
+				continue  # a normal sprite, not a shiny
+			partner = sprites.get(number - start + 1)
+			if partner is None:
+				continue
+			if int(np.count_nonzero(mask(idx) ^ mask(partner))) > min_diff_px:
+				pairs.append((idx, partner))
+	return pairs
+
+
 def sprite_groups(dataset, indices):
 	"""Group each shiny sprite with the normal sprite it recolours.
 
@@ -380,17 +420,30 @@ def create_fold_data_loaders(
 	random_state=42,
 	exclude_shiny=True,
 	group_aware=True,
+	include_pose_variants=False,
 	augmentations=None,
 ):
 	"""Cross-validation loaders; the test split is carved out first and stays
 	untouched. Each fold is (train_loader, val_loader, val_idx), val_idx
-	addressing the base dataset so out-of-fold predictions trace to images."""
+	addressing the base dataset so out-of-fold predictions trace to images.
+
+	`include_pose_variants` appends the 148 animated-frame shiny sprites to the
+	*training* side of each fold, but only where their normal partner is already
+	in that fold's train split. It changes the training set by design; what is
+	held invariant is the scored data: the test split and the normal train/val
+	partition are byte-identical to the exclude_shiny baseline, so the comparison
+	is truly paired and no variant ever sits opposite its near-identical partner.
+	"""
+	if include_pose_variants and not exclude_shiny:
+		raise ValueError("include_pose_variants requires exclude_shiny=True")
+
 	train_transform, test_transform = get_transforms(**(augmentations or {}))
 	base_dataset = load_dataset(data_dir)
 	indices = (
 		_normal_sprite_indices(base_dataset) if exclude_shiny else np.arange(len(base_dataset))
 	)
 	targets = np.array(base_dataset.targets)
+	variant_pairs = _pose_variant_pairs(base_dataset) if include_pose_variants else []
 
 	pool_idx, test_idx = train_test_split(
 		indices,
@@ -409,6 +462,12 @@ def create_fold_data_loaders(
 	for train_idx, val_idx in fold_indices(
 		base_dataset, pool_idx, folds, random_state=random_state, group_aware=group_aware
 	):
+		if variant_pairs:
+			train_members = set(train_idx.tolist())
+			extra = [variant for variant, partner in variant_pairs if partner in train_members]
+			if extra:
+				train_idx = np.concatenate([train_idx, np.array(extra, dtype=train_idx.dtype)])
+
 		shuffle_generator = torch.Generator().manual_seed(random_state)
 		train_loader = DataLoader(
 			Subset(load_dataset(data_dir, transform=train_transform), train_idx),
