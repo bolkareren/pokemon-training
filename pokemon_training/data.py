@@ -32,6 +32,48 @@ class RandomResolutionJitter:
 		return image.resize((size, size), Image.BILINEAR).resize(original, Image.BILINEAR)
 
 
+class AspectPreservedCrop:
+	"""Bbox-crop the creature and rescale to fill a square canvas, preserving
+	aspect ratio by padding the short side with the background colour. Removes the
+	empty margin (mean occupancy ~25% of the canvas) and, with it, absolute size -
+	the generation proxy the "no metadata shortcuts" rule keeps out.
+
+	Polarity-robust and polarity-preserving: the background is inferred from the
+	image border, so the creature may be dark-on-light or light-on-dark, and the
+	pad reuses that same background colour, so cropping never injects
+	foreground-valued pixels and the downstream threshold sees the polarity it
+	would without the crop. RNG-free, so it is safe to run inside the eval cache."""
+
+	def __init__(self, size=224, margin=4):
+		self.size = size
+		self.margin = margin
+
+	def __call__(self, image):
+		gray = np.asarray(image.convert("L"))
+		border = np.concatenate([gray[0], gray[-1], gray[:, 0], gray[:, -1]])
+		bg_is_light = np.median(border) > 127
+		foreground = gray < 127 if bg_is_light else gray > 127
+		rows, cols = np.where(foreground)
+		if len(rows) == 0:
+			return image.resize((self.size, self.size), Image.BILINEAR)
+
+		cropped = image.crop(
+			(int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1)
+		)
+		side = max(cropped.width, cropped.height) + 2 * self.margin
+
+		arr = np.asarray(image)
+		edges = np.concatenate([arr[0], arr[-1], arr[:, 0], arr[:, -1]])
+		if arr.ndim == 2:
+			fill = int(np.median(edges))
+		else:
+			fill = tuple(int(v) for v in np.median(edges, axis=0))
+
+		canvas = Image.new(image.mode, (side, side), fill)
+		canvas.paste(cropped, ((side - cropped.width) // 2, (side - cropped.height) // 2))
+		return canvas.resize((self.size, self.size), Image.BILINEAR)
+
+
 class RandomMorphology:
 	"""Randomly dilate or erode the binary mask by 1-2px, perturbing the contour."""
 
@@ -128,11 +170,16 @@ def get_transforms(
 	affine_scale=(0.85, 1.15),
 	input_channels=("mask", "mask", "mask"),
 	invert_mask=False,
+	aspect_crop=False,
 ):
 	"""Build (train, eval) transforms. Geometric augmentations run on the PIL
 	image; the threshold re-binarizes their interpolation; mask ops and channel
 	encoding run on the binary mask."""
-	geometric = []
+	# Framing normalisation runs first, before augmentation perturbs it, and on
+	# eval alike - it must be applied identically at train and inference.
+	crop = [AspectPreservedCrop()] if aspect_crop else []
+
+	geometric = list(crop)
 	if resolution_jitter:
 		geometric.append(RandomResolutionJitter())
 
@@ -171,6 +218,7 @@ def get_transforms(
 
 	test_transform = transforms.Compose(
 		[
+			*crop,
 			transforms.ToTensor(),
 			threshold,
 			encode,
