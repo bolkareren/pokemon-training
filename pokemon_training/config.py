@@ -70,7 +70,13 @@ class ExperimentConfig:
 	# Local state-dict checkpoint; overrides `weights` when set. Standard
 	# ImageNet weights beat the shape-biased checkpoint (C2).
 	weights_checkpoint: Path | None = None
-	train_last_n_layers: int = 3
+	# Unfreeze the last N of the 6 parameterized feature blocks (conv1, bn1,
+	# layer1-4) + the classifier; 6 = full feature unfreeze (7+ is identical).
+	# Raised 3 -> 6 by the p10 depth battery: full unfreeze is +1.68pt over lastN 3
+	# across 3 seeds (paired t p=0.003, McNemar p=0.005, all seeds positive). The
+	# old "2/3/4 plateau" was a distorted-fold artifact; depth is monotonic and
+	# only stable this deep because Phase 2's warmup landed first. See EXPERIMENTS.md.
+	train_last_n_layers: int = 6
 	# Stem geometry: "default", "nomaxpool" (drop the stem maxpool; layer1 sees
 	# 112x112, ~2x compute), or "stride1" (conv1 stride 1, maxpool kept - full-
 	# resolution first conv, same layer1 size as nomaxpool). Kernels are

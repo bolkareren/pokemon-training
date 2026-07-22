@@ -9,16 +9,17 @@ silhouettes, for a "Who's That Pokémon?" style guessing game. Sprites are
 scraped from pokemondb.net, converted to silhouettes, and used to fine-tune a
 torchvision backbone.
 
-**Current reference: 0.7496 out-of-fold accuracy** (single model, 5-fold grouped
+**Current reference: 0.7586 out-of-fold accuracy** (single model, 5-fold grouped
 CV, n=1110, config defaults at seed 42 on index-grouped folds; 3-seed spread
-0.7496/0.7387/0.7423 — `p7-ref-26-s*`). The defaults are the SDT input channel
-plus cosine/warmup/restore-best at blr 4e-4 over 26 epochs. The older 0.716 was
-the same config on distorted folds; every pre-2026-07-20 number is superseded by
-the fold correction. Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or
-interpreting any experiment — it holds the protocol, all measured results, and
-the active roadmap (see its "Next session" section: the data and framing levers
-are closed, so what remains is lower-prior model-side surgery — Phase 4 sketch
-checkpoints, then the Phase 5 depth/optimizer/weight-decay sweeps).
+0.7586/0.7676/0.7550, mean 0.7604 — `p10-lastn6-s*`). The defaults are the SDT
+input channel, cosine/warmup/restore-best at blr 4e-4 over 26 epochs, and
+**lastN 6 (full feature unfreeze)** — depth was the win of 2026-07-22 (+1.68pt
+over the old lastN-3 reference of 0.7496; the "depth plateau" was a distorted-fold
+artifact). Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting
+any experiment — it holds the protocol, all measured results, and the active
+roadmap. Next up (its "Next session" section): the full-fine-tune follow-ups the
+depth win reopened — BN affine, and re-tuning `backbone_lr`/`weight_decay` for the
+full-unfreeze regime, paired against `p10-lastn6-s*`.
 
 ## Workflow
 

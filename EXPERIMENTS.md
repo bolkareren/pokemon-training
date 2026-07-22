@@ -72,7 +72,8 @@ and none of its numbers are comparable to anything here.
 | is the historical 0.906 real? | no — ~62% of val had a pixel-identical shiny twin in train; honest score 0.617 | c0-leaky-reference |
 | honest baseline | **0.653** (resnet50, ImageNet weights, lastN=3 — the config defaults) | c2-resnet50-standard |
 | shape-biased checkpoint? | actively harmful: −5.7pt vs ImageNet at 4.0× SEM — the one large confirmed effect | c0-5fold vs c2-resnet50-standard |
-| how deep to fine-tune? | plateau across lastN 2/3/4; lastN 5 and 7 are not distinct configs; deep unfreezing unstable without warmup | c1-lastN* |
+| how deep to fine-tune? | ⚠ **superseded** — the "plateau across lastN 2/3/4" was a distorted-fold artifact. On corrected folds depth is monotonic; see the "depth re-sweep" row. (Original: lastN 5/7 not distinct — true, because lastN 6 = full unfreeze.) | c1-lastN* |
+| depth re-sweep (lastN 2/4/6)? | **confirmed win — default raised 3 → 6 (full unfreeze).** 3-seed battery vs `p7-ref-26-s*` (lastN 3): lastN 2 **−2.91pt** (all 15 folds down), lastN 4 **+0.99pt** (borderline, t=1.72 p=0.11), **lastN 6 +1.68pt** (t=3.59 **p=0.003**, McNemar +56 **p=0.005**, all 3 seeds +, 13/15 folds +) — clears the 2× bar. Depth is monotonic 2≪3<4<6; lastN 6 unfreezes all 6 feature blocks (conv1,bn1,layer1-4), so it *is* full fine-tuning and lastN 7+ ≡ 6. Stable only because Phase 2's warmup landed first (deep unfreezing was unstable before). Biggest model-side gain since the LR schedule; new reference **0.7604** (3-seed mean) | p10-lastn{2,4,6}-s* |
 | backbone size? | not the axis (50 > 18 > 34); weight origin was the confound | c2-* |
 | label smoothing hurting? | no — removing it costs 3.5pt; 0.05–0.2 flat; the train/val gap responds to it but accuracy doesn't → **gap is not predictive** | c3-ls* |
 | does added augmentation help? | no; elastic is significantly harmful (−4.9pt, 2.1× SEM) on contour-only input | c7-* |
@@ -93,32 +94,34 @@ and none of its numbers are comparable to anything here.
 | classical shape-descriptor floor? | **~0.285 OOF — the CNN wins by ~46pt.** Normalized elliptic Fourier (20 harmonics) + log Hu moments + 6 dimensionless ratios → shallow classifier (random forest best of logreg/SVM/RF), same seed-42 split as `p7-ref-26-s42` (byte-identical OOF set). Orientation-preserving EFD (canonical sprite pose kept as signal) beats fully rotation-invariant by +1.8pt OOF / +7.6pt test: **0.2847 OOF / 0.3807 test** vs 0.2667 / 0.3046. ~43× chance, so global shape carries real signal, but the CNN's 0.7496 comes overwhelmingly from learned local/fine structure, not gross silhouette form. Gap ~30× the fold SEM → one seed settles it. Sets the floor any silhouette-native architecture must clear decisively | sd-efd{inv,orient}-random_forest-s42 |
 | does filling the canvas help (aspect crop)? | **no — the top model-side lever closed too.** Bbox-crop + pad to fill the 224 canvas (occupancy ~25% → near-full), truly paired 3-seed vs `p7-ref-26-s*`: **+0.78pt mean** (+1.89/+0.99/−0.54), 15-fold paired t=1.13 p=0.28, McNemar 250 fixed / 224 broke net +26 p=0.25 — **under the 2× bar (1.95pt)**. s42 alone was +1.89pt (reads as a clear win); the 3-seed battery caught it — the power-check working. Third lever to land ~+0.8pt sub-bar after pose variants and leak-decomposition, and the first that is purely architecture/framing rather than data. `aspect_crop` flag kept, off by default | p8-crop-26-s* |
 
-**Current reference: 0.7496** (`p6-ref-26`, the config defaults at seed 42 on
-index-grouped folds — **pair every new experiment against this**). The best
-number ever measured is 0.7586 (`p5-ref-32`) but it is on superseded folds.
-The previously recorded 0.716/0.725 was the same config on distorted folds —
-**no model change accounts for the difference**; see the fold-correction note.
+**Current reference: 0.7586** (`p10-lastn6-s42`, the config defaults at seed 42
+on index-grouped folds — **pair every new experiment against `p10-lastn6-s*`**).
+The default became lastN 6 (full unfreeze) on 2026-07-22; the previous lastN-3
+reference was 0.7496 (`p7-ref-26-s42`). 3-seed spread now **0.7586 / 0.7676 /
+0.7550, mean 0.7604**. The old 0.716/0.725 was the same config on distorted
+folds — **no model change accounts for that difference**; see the fold-correction
+note. Every `p7-ref-26-s*` run is still valid as the *lastN-3* baseline the depth
+battery was paired against, just no longer the default.
 
 Reference table, all seed 42, all `(mask, sdt, mask)` + cosine/warmup/restore
 at blr 4e-4:
 
-| run | grouping | epochs | oof | SEM |
-|---|---|---|---|---|
-| `p5-ref-16` | IoU (superseded) | 16 | 0.7450 | 0.0118 |
-| `p5-ref-26-stepmatched` | IoU (superseded) | 26 | 0.7595 | 0.0121 |
-| `p5-ref-32` | IoU (superseded) | 32 | 0.7586 | 0.0154 |
-| **`p6-ref-26`** / `p7-ref-26-s42` | **index (current)** | **26** | **0.7496** | **0.0155** |
-| `p7-ref-26-s43` | index (current) | 26 | 0.7387 | — |
-| `p7-ref-26-s44` | index (current) | 26 | 0.7423 | — |
+| run | grouping | epochs | lastN | oof | SEM |
+|---|---|---|---|---|---|
+| `p5-ref-32` | IoU (superseded) | 32 | 3 | 0.7586 | 0.0154 |
+| `p7-ref-26-s42` | index | 26 | 3 (old default) | 0.7496 | 0.0155 |
+| `p7-ref-26-s43` | index | 26 | 3 | 0.7387 | — |
+| `p7-ref-26-s44` | index | 26 | 3 | 0.7423 | — |
+| **`p10-lastn6-s42`** | **index (current)** | **26** | **6 (default)** | **0.7586** | — |
+| `p10-lastn6-s43` | index (current) | 26 | 6 | 0.7676 | — |
+| `p10-lastn6-s44` | index (current) | 26 | 6 | 0.7550 | — |
 
-**Pair only against `p6-ref-26`.** The three `p5-ref-*` runs are on IoU-grouped
-folds, which share ~21% of fold membership with index-grouped folds —
-effectively unrelated splits. They remain useful as evidence about the *size*
-of the fold artifact, not as comparison baselines. (`p6-ref-26` vs
-`p5-ref-26-stepmatched` is 0.7496 vs 0.7595: unpaired, ~1pt, noise.)
+**Pair new experiments against `p10-lastn6-s*`** (the current default). The
+`p7-ref-26-s*` runs remain the correct paired baseline for anything measured
+*before* the depth change, and the lastN-3 arm the depth battery used.
 
-The three index-grouped seeds give the honest baseline spread: **0.7496 /
-0.7387 / 0.7423, seed range ~1.1pt** — consistent with the ~±1pt seed variance
+The three index-grouped default seeds give the honest baseline spread: **0.7586 /
+0.7676 / 0.7550, seed range ~1.3pt** — consistent with the ~±1pt seed variance
 noted in the protocol, and the reason single-seed comparisons at this effect
 size cannot resolve anything under ~3pt.
 
@@ -131,20 +134,25 @@ the question asked of it.
 
 Progression of confirmed gains (mixed fold regimes, so read as trend not
 ledger): 0.596 → 0.653 (ImageNet weights) → 0.677 (SDT channel) → 0.716
-(schedule/LR) → 0.7586 (same config, folds corrected).
+(schedule/LR) → 0.7586 (same config, folds corrected) → **0.7604 (full unfreeze,
+lastN 3 → 6; 3-seed mean, index folds)**.
 
-What the failures collectively point at: the bottleneck is not capacity,
-regularization, data variety, or task ambiguity — it is how much discriminating
-information reaches (and survives) the network. That is what the roadmap
-attacks: input representation first, then the stem that downsamples it away.
+What the *data/representation* failures collectively point at: the bottleneck
+there is not data variety or task ambiguity — it is how much discriminating
+information reaches (and survives) the network. **But the depth win (2026-07-22)
+qualifies this**: full unfreeze at +1.68pt shows trainable capacity / optimization
+depth *was* a real lever, once Phase 2's warmup made deep fine-tuning stable.
+So the picture is now two-part — representation levers are largely exhausted, but
+the optimization/fine-tuning axis has live headroom (depth, and its follow-ups:
+LR/weight-decay re-tuning and BN affine for the full-fine-tune regime).
 
-A pattern across the confirmed gains: **every one so far is model-agnostic
+A pattern that held across the *early* confirmed gains: they were **model-agnostic
 tooling** — data hygiene (dedup/grouped CV), pretrained-weight origin, input
-encoding and polarity, LR schedule and horizon. None required touching the
-architecture, and all of them transfer to whatever backbone eventually wins.
-The remaining roadmap is where that stops: Phases 3-4 are the first
-model-*specific* interventions, which is also why they were sequenced after
-the agnostic levers were exhausted.
+encoding and polarity, LR schedule and horizon — none touching the architecture,
+all transferable to whatever backbone wins. The depth win is the first that is
+model-*specific* (how much of ResNet-50 to fine-tune), and it is the largest
+single accuracy gain since the LR schedule — evidence the model-side region the
+fold correction had frozen is worth mining.
 
 Also measured, and load-bearing:
 
@@ -203,13 +211,20 @@ floor** was measured at **~0.285 OOF** (46pt below the CNN): global shape carrie
 real but limited signal, so the network's win is learned local/fine structure.
 Phase 4 was then run as a **DINOv2 frozen-feature probe** (not the sketch swap)
 and **closed**: 0.618 OOF, +33pt over the floor but −13pt vs the CNN — strong
-frozen transfer, but fine-tuning still wins. **No pending default changes
-remain.** What's left is lower-prior model-side surgery, in priority order:
+frozen transfer, but fine-tuning still wins. Then the **depth re-sweep landed the
+biggest model-side win since the LR schedule**: full unfreeze (**lastN 3 → 6**)
+is **+1.68pt confirmed** (p10, p=0.003 / McNemar p=0.005, all 3 seeds), and the
+old "depth plateau" was a distorted-fold artifact — the `train_last_n_layers`
+default is now 6 and the reference is **0.7604** (`p10-lastn6-s*`). That reopens
+the depth/optimizer region the fold correction had frozen. In priority order:
 
-1. **Remaining Phase 5 items**: depth re-sweep (lastN 2/4/6), optimizer
-   (AdamW never swept against SGD/Adam), weight decay, single-channel stem.
-   All are cheap, and all are **likely below single-run resolution** — plan
-   them as multi-seed paired batteries or accept they will read as null.
+1. **Full-fine-tune follow-ups** (the depth win reopened these): **BN affine** on
+   top of full unfreeze, and **re-tune `backbone_lr` / `weight_decay`** for the
+   full-fine-tune regime — the LR (4e-4) was tuned at lastN 3, and full unfreeze
+   may want a different value. Run as 3-seed batteries vs `p10-lastn6-s*`.
+2. **Remaining Phase 5 items**: optimizer (AdamW never swept against SGD/Adam,
+   though SGD needs its own LR), single-channel stem. Cheap, likely sub-resolution
+   — multi-seed paired batteries or accept a null.
    - **Silhouette-native architecture** is the one genuinely orthogonal idea
      (contour-sequence / point model over the boundary, vs the raster CNN).
      It must clear the ~0.285 descriptor floor decisively *and* approach the
@@ -218,8 +233,9 @@ remain.** What's left is lower-prior model-side surgery, in priority order:
      table (frozen probe got within 13pt): fine-tune last-N blocks of a ViT-S/B
      on the same split. Higher prior than the sketch swap but needs ViT backbone
      integration and overfits easily at n=1110 — parked, not scheduled.
-2. **Phase 6 last**, and not until the config stops moving: ensembling
-   amplifies whatever config it is handed.
+3. **Phase 6 last**, and not until the config stops moving: ensembling
+   amplifies whatever config it is handed. The config just moved (depth), so
+   the gate is not open.
 
 Cleared, no longer worth running: `--backbone-lr 8e-4` (null), `(sdt, mask,
 sdt)` duplicate-mask hypothesis (null), the leak decomposition (superseded by
@@ -230,22 +246,21 @@ upper bound on novel-silhouette value at this scale), and the **aspect-preserved
 crop** (`aspect_crop`, null at +0.78pt / 3 seeds — the top model-side lever, now
 closed; flag kept off by default).
 
-State at session end (2026-07-22): reference **0.7496** (`p6-ref-26` /
-`p7-ref-26-s42`, defaults on index-grouped folds — the number to pair against;
-3-seed spread 0.7496/0.7387/0.7423). Best ever measured is 0.7586 (`p5-ref-32`)
-but on superseded folds; the old 0.716 was the same config mismeasured. **No
-pending default changes remain**: the epoch horizon resolved flat and the
-`epochs` default is now 26 (`p9-ep32-s*`), and mask polarity confirmed the
-default (`p9-invmask-26-s*`). Tree clean, nothing running; everything below is on
-`main`. The pose-variant subset code (`include_pose_variants`) and the
-**aspect-crop** code (`aspect_crop`) are both off by default and kept for the
-record though their results were null — enabling them reproduces the
-`p7-pose-26-s*` / `p8-crop-26-s*` runs. The **classical shape-descriptor floor**
-(`scripts/shape_descriptor_baseline.py`, ~0.285 OOF) is done and sets the bar any
-silhouette-native architecture must clear. The next movers are all lower-prior
-model-side surgery (Phase 4 sketch checkpoints; Phase 5 depth / optimizer /
-weight-decay sweeps), each likely below single-run resolution — budget them as
-multi-seed batteries.
+State at session end (2026-07-22): reference **0.7586** (`p10-lastn6-s42`,
+defaults — now lastN 6 / full unfreeze — at seed 42; 3-seed spread
+0.7586/0.7676/0.7550, mean **0.7604** — the number to pair against, via
+`p10-lastn6-s*`). The lastN-3 reference was 0.7496 (`p7-ref-26-s42`), still the
+valid baseline for pre-depth comparisons. **Default changes this session**:
+`epochs` 32 → 26 (horizon flat), `train_last_n_layers` 3 → 6 (full unfreeze,
++1.68pt confirmed — the depth win). Mask polarity confirmed the default. The
+pose-variant (`include_pose_variants`) and aspect-crop (`aspect_crop`) flags are
+off by default (null results). Diagnostics on `main`: the classical shape floor
+(`scripts/shape_descriptor_baseline.py`, ~0.285), the DINOv2 frozen probe
+(`scripts/dinov2_probe.py`, 0.618), and the seed-agreement / confusion study
+(`scripts/seed_agreement_study.py`). **Next movers**: the full-fine-tune
+follow-ups the depth win reopened — BN affine on top of full unfreeze, and
+re-tuning `backbone_lr` / `weight_decay` for the full-fine-tune regime (LR was
+set at lastN 3). Budget as 3-seed paired batteries vs `p10-lastn6-s*`.
 
 ## Phase 1 — Third channel: edge filtering
 
@@ -389,8 +404,12 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
 - [ ] **leak decomposition** — train on the full unfiltered set, validate only
       on twin-free images; separates "measurement was wrong" from "we halved
       the data", and gates data expansion (the strongest untested lever).
-- [ ] **depth re-sweep** (lastN ∈ {2,3,4,6}) — last swept on the discarded
-      shape-biased checkpoint; skip 5/7 (not distinct configs).
+- [x] **depth re-sweep** (lastN ∈ {2,4,6}) — **done, the win of the session:
+      default raised 3 → 6 (full unfreeze), +1.68pt confirmed** (p10 battery; see
+      the results row). Depth is monotonic on corrected folds; lastN 6 is the max
+      (= full feature unfreeze). Follow-ups now: BN affine on top of full unfreeze,
+      and re-tuning blr / weight_decay for the full-fine-tune regime (the LR was
+      set at lastN 3).
 - [ ] **optimizer** — AdamW was assumed, never swept; SGD+momentum, Adam.
 - [ ] **weight decay, BN affine** — the unfinished regularization axes; low
       expected value (gap is not predictive), run for completeness.
