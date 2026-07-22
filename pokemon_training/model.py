@@ -69,6 +69,34 @@ def apply_stem(model, stem="default"):
 	return model
 
 
+def adapt_input_channels(model, in_channels):
+	"""Rebuild conv1 to accept `in_channels`, re-seeded from the pretrained stem.
+
+	Only acts when the count differs from the current stem (so the default
+	3-channel model is untouched). The pretrained RGB filters are summed over the
+	input dimension and split equally across the new channels: for a 1-channel
+	stem this is exactly "sum the RGB filters", which reproduces the pretrained
+	response for a replicated-grayscale input and keeps activations in the scale
+	BN and the later layers expect. Must run before set_trainable_weights so the
+	new conv1's requires_grad is set, and after apply_stem so a stride/geometry
+	tweak is inherited (stride/padding are copied from the existing conv1)."""
+	old = model.conv1
+	if in_channels == old.in_channels:
+		return model
+	new = torch.nn.Conv2d(
+		in_channels,
+		old.out_channels,
+		kernel_size=old.kernel_size,
+		stride=old.stride,
+		padding=old.padding,
+		bias=old.bias is not None,
+	)
+	summed = old.weight.data.sum(dim=1, keepdim=True)  # [out, 1, k, k]
+	new.weight.data = summed.repeat(1, in_channels, 1, 1) / in_channels
+	model.conv1 = new
+	return model
+
+
 def set_trainable_weights(model, train_last_n_layers=0):
 	for parameter in model.parameters():
 		parameter.requires_grad = False

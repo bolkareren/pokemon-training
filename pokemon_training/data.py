@@ -146,11 +146,16 @@ class SilhouetteChannels:
 		return torch.from_numpy(np.exp(-(distance**2) / (2.0 * self.EDGE_SIGMA**2))).float()
 
 	def __call__(self, x):
-		# Incoming tensor is creature = 1; polarity applies only on emission.
-		if all(channel == "mask" for channel in self.channels):
-			return x if self.invert_mask else 1.0 - x
-
+		# Incoming tensor is creature = 1 (RGB-replicated, so x[0..2] are equal);
+		# polarity applies only on emission.
 		mask = x[0]
+		if all(channel == "mask" for channel in self.channels):
+			# Emit exactly len(channels) mask copies - the channel count follows
+			# the config, not x's (always-3) RGB replication. For a 3-mask config
+			# this is byte-identical to the old `1.0 - x`; a 1-tuple gives 1 channel.
+			emitted = mask if self.invert_mask else 1.0 - mask
+			return emitted.unsqueeze(0).repeat(len(self.channels), 1, 1)
+
 		cache = {"mask": mask if self.invert_mask else 1.0 - mask}
 		built = []
 		for channel in self.channels:
@@ -201,6 +206,11 @@ def get_transforms(
 	# channels as background = 1 unless invert_mask is set.
 	threshold = transforms.Lambda(lambda x: (x < 0.5).float())
 	encode = SilhouetteChannels(input_channels, invert_mask=invert_mask)
+	# Normalize is length-aware so a single- (or two-) channel encoding works;
+	# the default 3-channel case is unchanged (full ImageNet stats).
+	n = len(input_channels)
+	norm_mean = [0.485, 0.456, 0.406][:n]
+	norm_std = [0.229, 0.224, 0.225][:n]
 
 	train_transform = transforms.Compose(
 		[
@@ -209,10 +219,7 @@ def get_transforms(
 			threshold,
 			*mask_ops,
 			encode,
-			transforms.Normalize(
-				mean=[0.485, 0.456, 0.406],
-				std=[0.229, 0.224, 0.225],
-			),
+			transforms.Normalize(mean=norm_mean, std=norm_std),
 		]
 	)
 
@@ -222,10 +229,7 @@ def get_transforms(
 			transforms.ToTensor(),
 			threshold,
 			encode,
-			transforms.Normalize(
-				mean=[0.485, 0.456, 0.406],
-				std=[0.229, 0.224, 0.225],
-			),
+			transforms.Normalize(mean=norm_mean, std=norm_std),
 		]
 	)
 

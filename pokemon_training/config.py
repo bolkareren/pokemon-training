@@ -49,7 +49,10 @@ class ExperimentConfig:
 	# "curv" (morphological curvature proxy), "edge" (thick boundary band).
 	# SDT confirmed over four paired seeds (+1.5pt, p=0.01 on 20 matched
 	# folds); all-mask was the pre-N2 default. See EXPERIMENTS.md.
-	input_channels: tuple[str, str, str] = ("mask", "sdt", "mask")
+	# Variable length: the stem's conv1 is rebuilt to match len(input_channels)
+	# (see model.adapt_input_channels), so a 1-tuple gives a single-channel stem.
+	# The default 3-tuple leaves conv1 untouched.
+	input_channels: tuple[str, ...] = ("mask", "sdt", "mask")
 	# Polarity of emitted "mask" channels: False = background 1 (the measured
 	# winner); derived channels always treat the creature as inside.
 	invert_mask: bool = False

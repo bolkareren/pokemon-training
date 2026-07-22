@@ -19,6 +19,7 @@ from pokemon_training.evaluation import (
 )
 from pokemon_training.experiment import get_device, set_random_seed
 from pokemon_training.model import (
+	adapt_input_channels,
 	apply_stem,
 	create_optimizer,
 	load_pretrained_model,
@@ -54,6 +55,7 @@ def build_model_and_optimizer(config, num_classes, weights_checkpoint):
 		weights_checkpoint=weights_checkpoint,
 	)
 	model = apply_stem(model, stem=config.stem)
+	model = adapt_input_channels(model, len(config.input_channels))
 	model = set_trainable_weights(model, train_last_n_layers=config.train_last_n_layers)
 	model = set_batch_norm_trainable(model, trainable=config.train_batch_norm_affine)
 
