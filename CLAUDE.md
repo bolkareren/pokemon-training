@@ -17,9 +17,12 @@ input channel, cosine/warmup/restore-best at blr 4e-4 over 26 epochs, and
 over the old lastN-3 reference of 0.7496; the "depth plateau" was a distorted-fold
 artifact). Read [EXPERIMENTS.md](EXPERIMENTS.md) before running or interpreting
 any experiment — it holds the protocol, all measured results, and the active
-roadmap. Next up (its "Next session" section): the full-fine-tune follow-ups the
-depth win reopened — BN affine, and re-tuning `backbone_lr`/`weight_decay` for the
-full-unfreeze regime, paired against `p10-lastn6-s*`.
+roadmap. The full-unfreeze optimizer follow-ups are now both closed as null (BN
+affine `p11-bnaffine-s*`; the `backbone_lr`/`weight_decay` re-tune `p12-lrwd-*` —
+LR settled at 4e-4, wd null at 3 seeds, defaults stand). Next up (its "Next
+session" section): **input-encoding re-exploration** — full unfreeze made the
+stem trainable, so the Phase-1/3 channel/stem nulls (edge, channel-position,
+single-channel stem) were all measured against a frozen ImageNet stem and reopen.
 
 ## Workflow
 

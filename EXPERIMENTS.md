@@ -74,6 +74,7 @@ and none of its numbers are comparable to anything here.
 | shape-biased checkpoint? | actively harmful: −5.7pt vs ImageNet at 4.0× SEM — the one large confirmed effect | c0-5fold vs c2-resnet50-standard |
 | how deep to fine-tune? | ⚠ **superseded** — the "plateau across lastN 2/3/4" was a distorted-fold artifact. On corrected folds depth is monotonic; see the "depth re-sweep" row. (Original: lastN 5/7 not distinct — true, because lastN 6 = full unfreeze.) | c1-lastN* |
 | depth re-sweep (lastN 2/4/6)? | **confirmed win — default raised 3 → 6 (full unfreeze).** 3-seed battery vs `p7-ref-26-s*` (lastN 3): lastN 2 **−2.91pt** (all 15 folds down), lastN 4 **+0.99pt** (borderline, t=1.72 p=0.11), **lastN 6 +1.68pt** (t=3.59 **p=0.003**, McNemar +56 **p=0.005**, all 3 seeds +, 13/15 folds +) — clears the 2× bar. Depth is monotonic 2≪3<4<6; lastN 6 unfreezes all 6 feature blocks (conv1,bn1,layer1-4), so it *is* full fine-tuning and lastN 7+ ≡ 6. Stable only because Phase 2's warmup landed first (deep unfreezing was unstable before). Biggest model-side gain since the LR schedule; new reference **0.7604** (3-seed mean) | p10-lastn{2,4,6}-s* |
+| re-tune blr/wd for full unfreeze? | **no — the lr/wd region is validated-null; `blr 4e-4 / wd 2e-3` survive the depth regime change.** Roadmap's #1 open lever after the depth win, since the LR was tuned at lastN 3. Seed-42 centered cross + diagonal (5 arms) around the reference: **backbone_lr settled** — both neighbors worse (1.5e-4 −1.6pt, 1e-3 **−2.9pt / >2× SEM**), 4e-4 is a flat top (a higher LR damages the now-trainable stem/layer1). **weight_decay showed only a seed-42 mirage**: wd 5e-4 was +0.99pt (0.74× SEM) and wd 8e-3 flat, so wd 5e-4 went to a 3-seed paired confirmation vs `p10-lastn6-s{42,43,44}` — and washed out: **−0.18pt mean** (+0.99/−1.08/−0.45), 15-fold paired t=−0.34 **p=0.74**, McNemar 169 fixed / 175 broke net −6 **p=0.79**. The "full unfreeze overfits → wants more regularization" hypothesis is dead (higher wd flat, lower wd null). Defaults stand; region closed | p12-lrwd-{A,B,C,D,E}-s42, p12-lrwd-C-*-s{43,44} |
 | backbone size? | not the axis (50 > 18 > 34); weight origin was the confound | c2-* |
 | label smoothing hurting? | no — removing it costs 3.5pt; 0.05–0.2 flat; the train/val gap responds to it but accuracy doesn't → **gap is not predictive** | c3-ls* |
 | does added augmentation help? | no; elastic is significantly harmful (−4.9pt, 2.1× SEM) on contour-only input | c7-* |
@@ -217,16 +218,29 @@ biggest model-side win since the LR schedule**: full unfreeze (**lastN 3 → 6**
 is **+1.68pt confirmed** (p10, p=0.003 / McNemar p=0.005, all 3 seeds), and the
 old "depth plateau" was a distorted-fold artifact — the `train_last_n_layers`
 default is now 6 and the reference is **0.7604** (`p10-lastn6-s*`). That reopens
-the depth/optimizer region the fold correction had frozen. In priority order:
+the depth/optimizer region the fold correction had frozen. The two highest-prior
+full-unfreeze follow-ups are now **both closed as null**: BN affine (`p11-bnaffine-s*`,
+−0.30pt, p=0.61 — conv layers already trainable) and the **blr/wd re-tune**
+(`p12-lrwd-*`, see the results row — LR settled at 4e-4 with both neighbors worse,
+wd null at 3 seeds p=0.74; the LR schedule tuned at lastN 3 survived the regime
+change). So the optimizer/regularization side of the reopened region is spent.
+In priority order:
 
-1. **Re-tune `backbone_lr` / `weight_decay` for the full-fine-tune regime** — the
-   LR (4e-4) was tuned at lastN 3, and full unfreeze may want a different value;
-   the highest-prior open lever. Run as a 3-seed battery vs `p10-lastn6-s*`.
-   (BN affine, the other full-unfreeze follow-up, was **tested and is null**:
-   `p11-bnaffine-s*` is −0.30pt at 3 seeds, p=0.61 — at full unfreeze the conv
-   layers are already trainable, so unfreezing BN scale/shift adds nothing.)
+1. **Input-encoding re-exploration** — the conceptually strongest reopen. Full
+   unfreeze moved the freeze boundary to the input: at lastN 3 the stem
+   (conv1/bn1) and layer1 were frozen ImageNet filters, so *every* Phase-1/3
+   channel/stem finding (edge dilutes SDT, channel-position matters, curv dies,
+   `(mask,sdt,mask)` winner) was a statement about a fixed natural-image stem —
+   a constraint now gone. Re-test with a **trainable** stem: single-channel stem
+   (does the net still need hand-designed SDT/mask, or learn equivalents from raw
+   mask?), edge channel redux, channel-position/dup-mask. Cheap; the ground is
+   genuinely new. Down-weight curv (its failure was stem *downsampling*, not
+   frozen weights — a trainable stem doesn't add resolution). Multi-seed paired
+   vs `p10-lastn6-s*`.
 2. **Remaining Phase 5 items**: optimizer (AdamW never swept against SGD/Adam,
-   though SGD needs its own LR), single-channel stem. Cheap, likely sub-resolution
+   though SGD needs its own LR), bigger/deeper backbone (the depth-of-fine-tuning
+   monotonicity raises the prior that raw capacity now pays — resnet101, but run
+   *with* awareness of overfitting at n=1110). Cheap, likely sub-resolution
    — multi-seed paired batteries or accept a null.
    - **Silhouette-native architecture** is the one genuinely orthogonal idea
      (contour-sequence / point model over the boundary, vs the raster CNN).
@@ -431,9 +445,13 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
       and re-tuning blr / weight_decay for the full-fine-tune regime (the LR was
       set at lastN 3).
 - [ ] **optimizer** — AdamW was assumed, never swept; SGD+momentum, Adam.
-- [~] **weight decay, BN affine** — BN affine **done, null** (−0.30pt at 3 seeds
-      on top of full unfreeze, `p11-bnaffine-s*`, p=0.61). Weight decay still
-      open, now folded into the full-fine-tune LR/wd re-tune (see "Next session").
+- [x] **weight decay, BN affine** — both **done, null**. BN affine −0.30pt at 3
+      seeds (`p11-bnaffine-s*`, p=0.61). Weight decay swept in the `p12-lrwd-*`
+      cross: lower wd (5e-4) was a seed-42 mirage (+0.99pt) that washed to −0.18pt
+      over 3 paired seeds (t p=0.74, McNemar p=0.79); higher wd (8e-3) flat.
+      Paired with the LR result (4e-4 settled, both neighbors worse, 1e-3 −2.9pt
+      >2× SEM), **the full-unfreeze lr/wd region is validated-null — defaults
+      stand.** See the results-table row.
 - [ ] **single-channel stem** — sum pretrained RGB filters; "drop the
       redundant capacity" vs Phase 1's "fill it".
 - [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
