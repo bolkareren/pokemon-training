@@ -218,10 +218,12 @@ old "depth plateau" was a distorted-fold artifact — the `train_last_n_layers`
 default is now 6 and the reference is **0.7604** (`p10-lastn6-s*`). That reopens
 the depth/optimizer region the fold correction had frozen. In priority order:
 
-1. **Full-fine-tune follow-ups** (the depth win reopened these): **BN affine** on
-   top of full unfreeze, and **re-tune `backbone_lr` / `weight_decay`** for the
-   full-fine-tune regime — the LR (4e-4) was tuned at lastN 3, and full unfreeze
-   may want a different value. Run as 3-seed batteries vs `p10-lastn6-s*`.
+1. **Re-tune `backbone_lr` / `weight_decay` for the full-fine-tune regime** — the
+   LR (4e-4) was tuned at lastN 3, and full unfreeze may want a different value;
+   the highest-prior open lever. Run as a 3-seed battery vs `p10-lastn6-s*`.
+   (BN affine, the other full-unfreeze follow-up, was **tested and is null**:
+   `p11-bnaffine-s*` is −0.30pt at 3 seeds, p=0.61 — at full unfreeze the conv
+   layers are already trainable, so unfreezing BN scale/shift adds nothing.)
 2. **Remaining Phase 5 items**: optimizer (AdamW never swept against SGD/Adam,
    though SGD needs its own LR), single-channel stem. Cheap, likely sub-resolution
    — multi-seed paired batteries or accept a null.
@@ -411,8 +413,9 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
       and re-tuning blr / weight_decay for the full-fine-tune regime (the LR was
       set at lastN 3).
 - [ ] **optimizer** — AdamW was assumed, never swept; SGD+momentum, Adam.
-- [ ] **weight decay, BN affine** — the unfinished regularization axes; low
-      expected value (gap is not predictive), run for completeness.
+- [~] **weight decay, BN affine** — BN affine **done, null** (−0.30pt at 3 seeds
+      on top of full unfreeze, `p11-bnaffine-s*`, p=0.61). Weight decay still
+      open, now folded into the full-fine-tune LR/wd re-tune (see "Next session").
 - [ ] **single-channel stem** — sum pretrained RGB filters; "drop the
       redundant capacity" vs Phase 1's "fill it".
 - [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
