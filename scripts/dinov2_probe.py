@@ -18,7 +18,6 @@ xformers is optional and falls back). Nothing is fine-tuned — this is a probe.
 
 import argparse
 import statistics
-from pathlib import Path
 
 import mlflow
 import numpy as np
@@ -52,7 +51,10 @@ def build_transforms():
 	silhouette = transforms.Compose(
 		[
 			transforms.Grayscale(num_output_channels=3),
-			transforms.Resize((RESOLUTION, RESOLUTION), interpolation=transforms.InterpolationMode.NEAREST),
+			transforms.Resize(
+				(RESOLUTION, RESOLUTION),
+				interpolation=transforms.InterpolationMode.NEAREST,
+			),
 			transforms.ToTensor(),
 			transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
 		]

@@ -1,11 +1,68 @@
 # Experiment log
 
+> # PROJECT CLOSED — 2026-07-23
+>
+> **Final: 0.8325 top-1 / 0.9442 top-5** on the 197-image held-out test split
+> (Wilson 95% CI [0.774, 0.878]) — a 15-model fold×seed ensemble, mean softmax,
+> 6-view TTA. **The test split is spent**; nothing further may be tuned against
+> it. See Phase 6 for the full report.
+>
+> **How it was won**, from the clean 0.596 baseline:
+>
+> | lever | gain | confirmed by |
+> |---|---|---|
+> | ImageNet weights | +5.7pt | — |
+> | SDT input channel | +2.4pt | 4 paired seeds |
+> | cosine + warmup + restore-best | **+5.1pt** | 2 seeds |
+> | full backbone unfreeze (lastN 3→6) | **+1.68pt** | 3-seed battery, p=0.003 |
+> | 6-view TTA | +1.38pt | 15 paired folds, p=0.0001 |
+> | 15-model ensemble | **+4.74pt** | one-shot test |
+>
+> **What the project actually taught**, which is not in the accuracy number:
+>
+> 1. **The first number was a lie, and finding that out was the whole game.**
+>    0.906 was duplicate leakage; the honest baseline was 0.596. Every
+>    methodology rule in CLAUDE.md exists because of that 31-point correction.
+> 2. **Single-run resolution is ~3.4pt, and most "wins" are noise.** Aspect crop
+>    read +1.89pt at seed 42 and died at 3 seeds (+0.78pt, p=0.28). Weight decay
+>    read +0.99pt and died (−0.18pt, p=0.74). The pose-variant data lever read
+>    +2.1pt and died (+0.81pt, p=0.28). **The 3-seed paired battery caught every
+>    one of them.** Without it this log would contain three phantom improvements.
+> 3. **The nulls localized where the signal is.** A classical shape floor at
+>    0.285 and a frozen DINOv2 probe at 0.618 bracket the problem: gross shape is
+>    worth little, generic visual features get most of the way, and the last 13pt
+>    is task-specific fine structure that only fine-tuning finds.
+> 4. **Two "obvious" mechanisms were backwards.** A trainable stem does *not*
+>    learn to replace hand-designed input channels (single-channel stem, −1.17pt).
+>    And an out-of-distribution TTA view (hflip, which the model never trains on)
+>    *helps*, because TTA pays for error decorrelation rather than per-view
+>    quality — null alone at 50% weight, decisive when diluted across six views.
+> 5. **Where the model still fails is structural, not perceptual.** Silhouette
+>    collisions stopped mattering entirely under ensembling (1.02× lift, zero
+>    errors above IoU 0.9, electrode/voltorb solved), while evolution-line
+>    confusions survived untouched at 13× chance. The remaining errors are
+>    Pokémon that genuinely look like their own evolutions.
+>
+> **If anyone picks this up again**, the live leads are: evolution-line
+> confusions (the one unbeaten failure mode), and the two ensemble findings
+> generated on spent test data — unanimous members are 100% accurate, and
+> confidence is sharply calibrated — which are **hypotheses needing fresh
+> measurement**, not results. Untouched checklist items (optimizer sweep, edge
+> redux, channel-position, SDT re-confirmation) are all low-prior and must be
+> measured against the post-split 0.7643 reference, not the older 0.7604/0.7586.
+
 Everything here runs on the deduplicated dataset (1307 images, 151 classes,
 shiny recolours excluded) and is scored by 5-fold grouped CV after a 15% test
 split is carved out: **`oof_accuracy` pooled over 1110 out-of-fold predictions,
 compared on `fold_accuracy_sem`**. Full per-phase logs live in git history;
 the pre-dedup era is summarized in [LEAKY-EXPERIMENTS.md](LEAKY-EXPERIMENTS.md)
 and none of its numbers are comparable to anything here.
+
+> **Reference lineage.** Three reference numbers appear below and they are *not*
+> interchangeable: **0.7496** (lastN 3, pre-depth-win), **0.7604**
+> (`p10-lastn6-s*`, post-depth-win), and **0.7643** (`p14-ref-extsplit-s*`,
+> post-on-disk-split — same config, different fold composition). Compare only
+> within a lineage.
 
 > **Fold correction, 2026-07-20 — read before comparing anything to an older
 > number.** Two bugs in fold construction were fixed in one session, and both
@@ -199,7 +256,15 @@ truth — the SDT re-verification demonstrated exactly this failure. For any
 effect expected under ~3pt, budget paired folds across ≥2 seeds and report the
 paired t-test and McNemar counts, not just the oof delta.
 
-## Next session — start here
+## Roadmap as of 2026-07-22 — SUPERSEDED, kept for history
+
+**This section is closed.** It was the live roadmap up to the day before the
+project finished; everything it schedules has since been run and resolved (the
+optimizer follow-ups came back null, the input-encoding re-exploration's sharpest
+question came back negative, and Phase 6 was executed). Read the banner at the top
+of this file for the final state, and Phase 6 for the result. Kept because the
+reasoning about *which* levers looked promising, and why most of them were wrong,
+is the more useful record.
 
 The data and framing levers are closed, the two weakened ⚠ rows are resolved,
 and a from-scratch floor is now on the board. Recent arc (2026-07-20 → -07-22):
