@@ -117,6 +117,15 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 			restore_best_epoch=config.restore_best_epoch,
 		)
 
+		# Persist the *restored* best-epoch weights (train_outer_loop has already
+		# loaded them back) so Phase 6 can ensemble fold models without retraining.
+		# state_dict rather than a pickled model: leaner, and the ensemble loads by
+		# a predictable path instead of resolving MLflow artifact URIs.
+		if config.save_model:
+			fold_weights_dir = PROJECT_ROOT / "weights" / (config.run_name or "unnamed-run")
+			fold_weights_dir.mkdir(parents=True, exist_ok=True)
+			torch.save(model.state_dict(), fold_weights_dir / f"fold{fold}.pt")
+
 		predictions, labels = predict_top_k(model, val_loader, k=5, device=device)
 		fold_accuracy = top_k_accuracy_from_predictions(predictions, labels, k=1)
 		# Measure the gap at the epoch actually scored - the restored one when
