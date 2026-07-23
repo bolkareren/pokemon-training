@@ -474,6 +474,7 @@ def create_fold_data_loaders(
 	group_aware=True,
 	include_pose_variants=False,
 	augmentations=None,
+	test_dir=None,
 ):
 	"""Cross-validation loaders; the test split is carved out first and stays
 	untouched. Each fold is (train_loader, val_loader, val_idx), val_idx
@@ -497,18 +498,37 @@ def create_fold_data_loaders(
 	targets = np.array(base_dataset.targets)
 	variant_pairs = _pose_variant_pairs(base_dataset) if include_pose_variants else []
 
-	pool_idx, test_idx = train_test_split(
-		indices,
-		test_size=test_size,
-		stratify=targets[indices],
-		random_state=random_state,
-	)
-
-	test_loader = DataLoader(
-		EvalTransformCache(Subset(load_dataset(data_dir, transform=test_transform), test_idx)),
-		batch_size=batch_size,
-		shuffle=False,
-	)
+	if test_dir is not None:
+		# On-disk test split (scripts/create_test_split.py): the test images
+		# physically live elsewhere, so all of data_dir is the pool and no further
+		# carve happens here. `test_size` is unused in this mode.
+		pool_idx = indices
+		external = load_dataset(test_dir, transform=test_transform)
+		if external.classes != base_dataset.classes:
+			raise ValueError(
+				"test_dir's class list differs from data_dir's; label ids would misalign. "
+				f"{len(external.classes)} vs {len(base_dataset.classes)} classes."
+			)
+		test_indices = (
+			_normal_sprite_indices(external) if exclude_shiny else np.arange(len(external))
+		)
+		test_loader = DataLoader(
+			EvalTransformCache(Subset(external, test_indices)),
+			batch_size=batch_size,
+			shuffle=False,
+		)
+	else:
+		pool_idx, test_idx = train_test_split(
+			indices,
+			test_size=test_size,
+			stratify=targets[indices],
+			random_state=random_state,
+		)
+		test_loader = DataLoader(
+			EvalTransformCache(Subset(load_dataset(data_dir, transform=test_transform), test_idx)),
+			batch_size=batch_size,
+			shuffle=False,
+		)
 
 	fold_loaders = []
 	for train_idx, val_idx in fold_indices(

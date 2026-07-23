@@ -77,6 +77,7 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 		data_dir=data_dir,
 		folds=config.folds,
 		test_size=config.test_size,
+		test_dir=config.test_dir,
 		batch_size=config.batch_size,
 		random_state=config.random_state,
 		exclude_shiny=config.exclude_shiny,
@@ -156,6 +157,14 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 
 def main(config: ExperimentConfig) -> None:
 	data_dir = config.data_dir or PROJECT_ROOT / "data"
+	if config.test_dir is not None:
+		if not config.test_dir.is_absolute():
+			config.test_dir = PROJECT_ROOT / config.test_dir
+		if not config.folds:
+			raise ValueError(
+				"test_dir (on-disk test split) is supported in fold mode only; pass --folds 5. "
+				"The single-split path carves its own val/test out of data_dir."
+			)
 	weights_checkpoint = config.weights_checkpoint
 	if weights_checkpoint is not None and not weights_checkpoint.is_absolute():
 		weights_checkpoint = PROJECT_ROOT / weights_checkpoint

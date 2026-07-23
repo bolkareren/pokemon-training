@@ -11,6 +11,11 @@ class ExperimentConfig:
 
 	# Data
 	data_dir: Path | None = None  # defaults to <project_root>/data when unset
+	# On-disk test split (scripts/create_test_split.py). When set, ALL of data_dir
+	# is the CV pool and the test set is loaded from here instead of being carved
+	# out by `test_size` - the Phase 6 guarantee that test images cannot leak into
+	# ensembling. Fold mode only. `test_size` is ignored in this mode.
+	test_dir: Path | None = None
 	batch_size: int = 16
 	# Both must stay >= 0.15: a smaller split has fewer images than the 151
 	# classes and the stratified split raises.

@@ -1,0 +1,1923 @@
+{
+  "seed": 42,
+  "test_size": 0.15,
+  "n_test_normals": 197,
+  "n_shiny_twins": 122,
+  "note": "Seed-42 test split carved onto disk for Phase 6. Shiny recolours of test normals moved too, so no near-duplicate of a test silhouette remains in data/. Reversible: scripts/create_test_split.py --revert.",
+  "moves": [
+    {
+      "kind": "normal",
+      "class": "abra",
+      "src": "data/abra/image-7.png",
+      "dst": "test_data/abra/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "aerodactyl",
+      "src": "data/aerodactyl/image-7.png",
+      "dst": "test_data/aerodactyl/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "alakazam",
+      "src": "data/alakazam/image-4.png",
+      "dst": "test_data/alakazam/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "arbok",
+      "src": "data/arbok/image-4.png",
+      "dst": "test_data/arbok/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "arbok",
+      "src": "data/arbok/image-7.png",
+      "dst": "test_data/arbok/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "arcanine",
+      "src": "data/arcanine/image-2.png",
+      "dst": "test_data/arcanine/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "arcanine",
+      "src": "data/arcanine/image-5.png",
+      "dst": "test_data/arcanine/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "articuno",
+      "src": "data/articuno/image-1.png",
+      "dst": "test_data/articuno/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "beedrill",
+      "src": "data/beedrill/image-3.png",
+      "dst": "test_data/beedrill/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "bellsprout",
+      "src": "data/bellsprout/image-0.png",
+      "dst": "test_data/bellsprout/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "bellsprout",
+      "src": "data/bellsprout/image-3.png",
+      "dst": "test_data/bellsprout/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "blastoise",
+      "src": "data/blastoise/image-2.png",
+      "dst": "test_data/blastoise/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "bulbasaur",
+      "src": "data/bulbasaur/image-2.png",
+      "dst": "test_data/bulbasaur/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "bulbasaur",
+      "src": "data/bulbasaur/image-3.png",
+      "dst": "test_data/bulbasaur/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "butterfree",
+      "src": "data/butterfree/image-7.png",
+      "dst": "test_data/butterfree/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "caterpie",
+      "src": "data/caterpie/image-1.png",
+      "dst": "test_data/caterpie/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "chansey",
+      "src": "data/chansey/image-1.png",
+      "dst": "test_data/chansey/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "chansey",
+      "src": "data/chansey/image-6.png",
+      "dst": "test_data/chansey/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "charizard",
+      "src": "data/charizard/image-0.png",
+      "dst": "test_data/charizard/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "charizard",
+      "src": "data/charizard/image-7.png",
+      "dst": "test_data/charizard/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "charmander",
+      "src": "data/charmander/image-1.png",
+      "dst": "test_data/charmander/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "charmander",
+      "src": "data/charmander/image-2.png",
+      "dst": "test_data/charmander/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "charmeleon",
+      "src": "data/charmeleon/image-3.png",
+      "dst": "test_data/charmeleon/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "clefable",
+      "src": "data/clefable/image-1.png",
+      "dst": "test_data/clefable/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "clefairy",
+      "src": "data/clefairy/image-5.png",
+      "dst": "test_data/clefairy/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "cloyster",
+      "src": "data/cloyster/image-5.png",
+      "dst": "test_data/cloyster/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "cubone",
+      "src": "data/cubone/image-3.png",
+      "dst": "test_data/cubone/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dewgong",
+      "src": "data/dewgong/image-3.png",
+      "dst": "test_data/dewgong/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dewgong",
+      "src": "data/dewgong/image-5.png",
+      "dst": "test_data/dewgong/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "diglett",
+      "src": "data/diglett/image-0.png",
+      "dst": "test_data/diglett/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "diglett",
+      "src": "data/diglett/image-2.png",
+      "dst": "test_data/diglett/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ditto",
+      "src": "data/ditto/image-4.png",
+      "dst": "test_data/ditto/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dodrio",
+      "src": "data/dodrio/image-0.png",
+      "dst": "test_data/dodrio/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "doduo",
+      "src": "data/doduo/image-0.png",
+      "dst": "test_data/doduo/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "doduo",
+      "src": "data/doduo/image-7.png",
+      "dst": "test_data/doduo/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dragonair",
+      "src": "data/dragonair/image-2.png",
+      "dst": "test_data/dragonair/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dragonite",
+      "src": "data/dragonite/image-0.png",
+      "dst": "test_data/dragonite/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dratini",
+      "src": "data/dratini/image-4.png",
+      "dst": "test_data/dratini/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "drowzee",
+      "src": "data/drowzee/image-5.png",
+      "dst": "test_data/drowzee/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "dugtrio",
+      "src": "data/dugtrio/image-2.png",
+      "dst": "test_data/dugtrio/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "eevee",
+      "src": "data/eevee/image-0.png",
+      "dst": "test_data/eevee/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "eevee",
+      "src": "data/eevee/image-3.png",
+      "dst": "test_data/eevee/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ekans",
+      "src": "data/ekans/image-0.png",
+      "dst": "test_data/ekans/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ekans",
+      "src": "data/ekans/image-8.png",
+      "dst": "test_data/ekans/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "electabuzz",
+      "src": "data/electabuzz/image-0.png",
+      "dst": "test_data/electabuzz/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "electabuzz",
+      "src": "data/electabuzz/image-7.png",
+      "dst": "test_data/electabuzz/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "electrode",
+      "src": "data/electrode/image-1.png",
+      "dst": "test_data/electrode/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "exeggcute",
+      "src": "data/exeggcute/image-7.png",
+      "dst": "test_data/exeggcute/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "exeggutor",
+      "src": "data/exeggutor/image-6.png",
+      "dst": "test_data/exeggutor/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "exeggutor",
+      "src": "data/exeggutor/image-8.png",
+      "dst": "test_data/exeggutor/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "farfetchd",
+      "src": "data/farfetchd/image-4.png",
+      "dst": "test_data/farfetchd/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "fearow",
+      "src": "data/fearow/image-1.png",
+      "dst": "test_data/fearow/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "flareon",
+      "src": "data/flareon/image-3.png",
+      "dst": "test_data/flareon/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gastly",
+      "src": "data/gastly/image-6.png",
+      "dst": "test_data/gastly/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gengar",
+      "src": "data/gengar/image-8.png",
+      "dst": "test_data/gengar/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "geodude",
+      "src": "data/geodude/image-2.png",
+      "dst": "test_data/geodude/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gloom",
+      "src": "data/gloom/image-4.png",
+      "dst": "test_data/gloom/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gloom",
+      "src": "data/gloom/image-8.png",
+      "dst": "test_data/gloom/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "golbat",
+      "src": "data/golbat/image-3.png",
+      "dst": "test_data/golbat/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "goldeen",
+      "src": "data/goldeen/image-6.png",
+      "dst": "test_data/goldeen/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "golduck",
+      "src": "data/golduck/image-1.png",
+      "dst": "test_data/golduck/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "golduck",
+      "src": "data/golduck/image-6.png",
+      "dst": "test_data/golduck/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "golem",
+      "src": "data/golem/image-5.png",
+      "dst": "test_data/golem/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "golem",
+      "src": "data/golem/image-6.png",
+      "dst": "test_data/golem/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "graveler",
+      "src": "data/graveler/image-1.png",
+      "dst": "test_data/graveler/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "grimer",
+      "src": "data/grimer/image-5.png",
+      "dst": "test_data/grimer/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "growlithe",
+      "src": "data/growlithe/image-2.png",
+      "dst": "test_data/growlithe/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gyarados",
+      "src": "data/gyarados/image-5.png",
+      "dst": "test_data/gyarados/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "gyarados",
+      "src": "data/gyarados/image-6.png",
+      "dst": "test_data/gyarados/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "haunter",
+      "src": "data/haunter/image-3.png",
+      "dst": "test_data/haunter/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "haunter",
+      "src": "data/haunter/image-8.png",
+      "dst": "test_data/haunter/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "hitmonchan",
+      "src": "data/hitmonchan/image-8.png",
+      "dst": "test_data/hitmonchan/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "hitmonlee",
+      "src": "data/hitmonlee/image-4.png",
+      "dst": "test_data/hitmonlee/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "horsea",
+      "src": "data/horsea/image-4.png",
+      "dst": "test_data/horsea/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "horsea",
+      "src": "data/horsea/image-7.png",
+      "dst": "test_data/horsea/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "hypno",
+      "src": "data/hypno/image-2.png",
+      "dst": "test_data/hypno/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "hypno",
+      "src": "data/hypno/image-8.png",
+      "dst": "test_data/hypno/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ivysaur",
+      "src": "data/ivysaur/image-0.png",
+      "dst": "test_data/ivysaur/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "jigglypuff",
+      "src": "data/jigglypuff/image-5.png",
+      "dst": "test_data/jigglypuff/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "jigglypuff",
+      "src": "data/jigglypuff/image-7.png",
+      "dst": "test_data/jigglypuff/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "jolteon",
+      "src": "data/jolteon/image-1.png",
+      "dst": "test_data/jolteon/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "jolteon",
+      "src": "data/jolteon/image-3.png",
+      "dst": "test_data/jolteon/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "jynx",
+      "src": "data/jynx/image-3.png",
+      "dst": "test_data/jynx/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kabuto",
+      "src": "data/kabuto/image-3.png",
+      "dst": "test_data/kabuto/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kabutops",
+      "src": "data/kabutops/image-4.png",
+      "dst": "test_data/kabutops/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kadabra",
+      "src": "data/kadabra/image-0.png",
+      "dst": "test_data/kadabra/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kakuna",
+      "src": "data/kakuna/image-6.png",
+      "dst": "test_data/kakuna/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kangaskhan",
+      "src": "data/kangaskhan/image-2.png",
+      "dst": "test_data/kangaskhan/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "kingler",
+      "src": "data/kingler/image-0.png",
+      "dst": "test_data/kingler/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "koffing",
+      "src": "data/koffing/image-0.png",
+      "dst": "test_data/koffing/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "krabby",
+      "src": "data/krabby/image-4.png",
+      "dst": "test_data/krabby/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "lapras",
+      "src": "data/lapras/image-1.png",
+      "dst": "test_data/lapras/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "lapras",
+      "src": "data/lapras/image-4.png",
+      "dst": "test_data/lapras/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "lickitung",
+      "src": "data/lickitung/image-5.png",
+      "dst": "test_data/lickitung/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "machamp",
+      "src": "data/machamp/image-0.png",
+      "dst": "test_data/machamp/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "machoke",
+      "src": "data/machoke/image-5.png",
+      "dst": "test_data/machoke/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "machop",
+      "src": "data/machop/image-3.png",
+      "dst": "test_data/machop/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magikarp",
+      "src": "data/magikarp/image-6.png",
+      "dst": "test_data/magikarp/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magmar",
+      "src": "data/magmar/image-5.png",
+      "dst": "test_data/magmar/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magnemite",
+      "src": "data/magnemite/image-2.png",
+      "dst": "test_data/magnemite/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magnemite",
+      "src": "data/magnemite/image-6.png",
+      "dst": "test_data/magnemite/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magneton",
+      "src": "data/magneton/image-1.png",
+      "dst": "test_data/magneton/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "magneton",
+      "src": "data/magneton/image-6.png",
+      "dst": "test_data/magneton/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "mankey",
+      "src": "data/mankey/image-0.png",
+      "dst": "test_data/mankey/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "marowak",
+      "src": "data/marowak/image-5.png",
+      "dst": "test_data/marowak/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "meowth",
+      "src": "data/meowth/image-2.png",
+      "dst": "test_data/meowth/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "metapod",
+      "src": "data/metapod/image-7.png",
+      "dst": "test_data/metapod/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "mew",
+      "src": "data/mew/image-2.png",
+      "dst": "test_data/mew/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "mewtwo",
+      "src": "data/mewtwo/image-5.png",
+      "dst": "test_data/mewtwo/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "moltres",
+      "src": "data/moltres/image-1.png",
+      "dst": "test_data/moltres/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "mr-mime",
+      "src": "data/mr-mime/image-0.png",
+      "dst": "test_data/mr-mime/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "muk",
+      "src": "data/muk/image-0.png",
+      "dst": "test_data/muk/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "muk",
+      "src": "data/muk/image-3.png",
+      "dst": "test_data/muk/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidoking",
+      "src": "data/nidoking/image-6.png",
+      "dst": "test_data/nidoking/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidoqueen",
+      "src": "data/nidoqueen/image-7.png",
+      "dst": "test_data/nidoqueen/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidoran-f",
+      "src": "data/nidoran-f/image-2.png",
+      "dst": "test_data/nidoran-f/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidoran-m",
+      "src": "data/nidoran-m/image-1.png",
+      "dst": "test_data/nidoran-m/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidorina",
+      "src": "data/nidorina/image-4.png",
+      "dst": "test_data/nidorina/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "nidorino",
+      "src": "data/nidorino/image-1.png",
+      "dst": "test_data/nidorino/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ninetales",
+      "src": "data/ninetales/image-8.png",
+      "dst": "test_data/ninetales/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "oddish",
+      "src": "data/oddish/image-3.png",
+      "dst": "test_data/oddish/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "oddish",
+      "src": "data/oddish/image-6.png",
+      "dst": "test_data/oddish/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "omanyte",
+      "src": "data/omanyte/image-0.png",
+      "dst": "test_data/omanyte/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "omastar",
+      "src": "data/omastar/image-7.png",
+      "dst": "test_data/omastar/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "onix",
+      "src": "data/onix/image-5.png",
+      "dst": "test_data/onix/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "paras",
+      "src": "data/paras/image-5.png",
+      "dst": "test_data/paras/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "parasect",
+      "src": "data/parasect/image-4.png",
+      "dst": "test_data/parasect/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "persian",
+      "src": "data/persian/image-5.png",
+      "dst": "test_data/persian/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "persian",
+      "src": "data/persian/image-8.png",
+      "dst": "test_data/persian/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "pidgeot",
+      "src": "data/pidgeot/image-6.png",
+      "dst": "test_data/pidgeot/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "pidgeotto",
+      "src": "data/pidgeotto/image-1.png",
+      "dst": "test_data/pidgeotto/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "pidgey",
+      "src": "data/pidgey/image-0.png",
+      "dst": "test_data/pidgey/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "pikachu",
+      "src": "data/pikachu/image-3.png",
+      "dst": "test_data/pikachu/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "pinsir",
+      "src": "data/pinsir/image-1.png",
+      "dst": "test_data/pinsir/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "poliwag",
+      "src": "data/poliwag/image-1.png",
+      "dst": "test_data/poliwag/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "poliwag",
+      "src": "data/poliwag/image-3.png",
+      "dst": "test_data/poliwag/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "poliwhirl",
+      "src": "data/poliwhirl/image-7.png",
+      "dst": "test_data/poliwhirl/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "poliwrath",
+      "src": "data/poliwrath/image-1.png",
+      "dst": "test_data/poliwrath/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "poliwrath",
+      "src": "data/poliwrath/image-5.png",
+      "dst": "test_data/poliwrath/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "ponyta",
+      "src": "data/ponyta/image-0.png",
+      "dst": "test_data/ponyta/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "porygon",
+      "src": "data/porygon/image-4.png",
+      "dst": "test_data/porygon/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "primeape",
+      "src": "data/primeape/image-2.png",
+      "dst": "test_data/primeape/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "psyduck",
+      "src": "data/psyduck/image-8.png",
+      "dst": "test_data/psyduck/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "raichu",
+      "src": "data/raichu/image-6.png",
+      "dst": "test_data/raichu/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "raichu",
+      "src": "data/raichu/image-8.png",
+      "dst": "test_data/raichu/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "rapidash",
+      "src": "data/rapidash/image-6.png",
+      "dst": "test_data/rapidash/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "raticate",
+      "src": "data/raticate/image-2.png",
+      "dst": "test_data/raticate/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "rattata",
+      "src": "data/rattata/image-1.png",
+      "dst": "test_data/rattata/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "rhydon",
+      "src": "data/rhydon/image-3.png",
+      "dst": "test_data/rhydon/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "rhyhorn",
+      "src": "data/rhyhorn/image-6.png",
+      "dst": "test_data/rhyhorn/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "sandshrew",
+      "src": "data/sandshrew/image-0.png",
+      "dst": "test_data/sandshrew/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "sandshrew",
+      "src": "data/sandshrew/image-5.png",
+      "dst": "test_data/sandshrew/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "sandslash",
+      "src": "data/sandslash/image-4.png",
+      "dst": "test_data/sandslash/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "sandslash",
+      "src": "data/sandslash/image-7.png",
+      "dst": "test_data/sandslash/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "scyther",
+      "src": "data/scyther/image-2.png",
+      "dst": "test_data/scyther/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "seadra",
+      "src": "data/seadra/image-3.png",
+      "dst": "test_data/seadra/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "seaking",
+      "src": "data/seaking/image-1.png",
+      "dst": "test_data/seaking/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "seel",
+      "src": "data/seel/image-3.png",
+      "dst": "test_data/seel/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "seel",
+      "src": "data/seel/image-7.png",
+      "dst": "test_data/seel/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "shellder",
+      "src": "data/shellder/image-4.png",
+      "dst": "test_data/shellder/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "shellder",
+      "src": "data/shellder/image-7.png",
+      "dst": "test_data/shellder/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "slowbro",
+      "src": "data/slowbro/image-8.png",
+      "dst": "test_data/slowbro/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "slowpoke",
+      "src": "data/slowpoke/image-0.png",
+      "dst": "test_data/slowpoke/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "slowpoke",
+      "src": "data/slowpoke/image-5.png",
+      "dst": "test_data/slowpoke/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "snorlax",
+      "src": "data/snorlax/image-0.png",
+      "dst": "test_data/snorlax/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "snorlax",
+      "src": "data/snorlax/image-8.png",
+      "dst": "test_data/snorlax/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "spearow",
+      "src": "data/spearow/image-6.png",
+      "dst": "test_data/spearow/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "squirtle",
+      "src": "data/squirtle/image-8.png",
+      "dst": "test_data/squirtle/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "starmie",
+      "src": "data/starmie/image-1.png",
+      "dst": "test_data/starmie/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "staryu",
+      "src": "data/staryu/image-7.png",
+      "dst": "test_data/staryu/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tangela",
+      "src": "data/tangela/image-7.png",
+      "dst": "test_data/tangela/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tauros",
+      "src": "data/tauros/image-1.png",
+      "dst": "test_data/tauros/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tauros",
+      "src": "data/tauros/image-5.png",
+      "dst": "test_data/tauros/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tentacool",
+      "src": "data/tentacool/image-0.png",
+      "dst": "test_data/tentacool/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tentacool",
+      "src": "data/tentacool/image-3.png",
+      "dst": "test_data/tentacool/image-3.png"
+    },
+    {
+      "kind": "normal",
+      "class": "tentacruel",
+      "src": "data/tentacruel/image-0.png",
+      "dst": "test_data/tentacruel/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "vaporeon",
+      "src": "data/vaporeon/image-0.png",
+      "dst": "test_data/vaporeon/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "venomoth",
+      "src": "data/venomoth/image-2.png",
+      "dst": "test_data/venomoth/image-2.png"
+    },
+    {
+      "kind": "normal",
+      "class": "venonat",
+      "src": "data/venonat/image-5.png",
+      "dst": "test_data/venonat/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "venusaur",
+      "src": "data/venusaur/image-6.png",
+      "dst": "test_data/venusaur/image-6.png"
+    },
+    {
+      "kind": "normal",
+      "class": "victreebel",
+      "src": "data/victreebel/image-0.png",
+      "dst": "test_data/victreebel/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "vileplume",
+      "src": "data/vileplume/image-0.png",
+      "dst": "test_data/vileplume/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "vileplume",
+      "src": "data/vileplume/image-8.png",
+      "dst": "test_data/vileplume/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "voltorb",
+      "src": "data/voltorb/image-0.png",
+      "dst": "test_data/voltorb/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "voltorb",
+      "src": "data/voltorb/image-5.png",
+      "dst": "test_data/voltorb/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "vulpix",
+      "src": "data/vulpix/image-1.png",
+      "dst": "test_data/vulpix/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "vulpix",
+      "src": "data/vulpix/image-7.png",
+      "dst": "test_data/vulpix/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "wartortle",
+      "src": "data/wartortle/image-4.png",
+      "dst": "test_data/wartortle/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "wartortle",
+      "src": "data/wartortle/image-5.png",
+      "dst": "test_data/wartortle/image-5.png"
+    },
+    {
+      "kind": "normal",
+      "class": "weedle",
+      "src": "data/weedle/image-4.png",
+      "dst": "test_data/weedle/image-4.png"
+    },
+    {
+      "kind": "normal",
+      "class": "weepinbell",
+      "src": "data/weepinbell/image-1.png",
+      "dst": "test_data/weepinbell/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "weezing",
+      "src": "data/weezing/image-1.png",
+      "dst": "test_data/weezing/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "wigglytuff",
+      "src": "data/wigglytuff/image-1.png",
+      "dst": "test_data/wigglytuff/image-1.png"
+    },
+    {
+      "kind": "normal",
+      "class": "wigglytuff",
+      "src": "data/wigglytuff/image-8.png",
+      "dst": "test_data/wigglytuff/image-8.png"
+    },
+    {
+      "kind": "normal",
+      "class": "zapdos",
+      "src": "data/zapdos/image-0.png",
+      "dst": "test_data/zapdos/image-0.png"
+    },
+    {
+      "kind": "normal",
+      "class": "zapdos",
+      "src": "data/zapdos/image-7.png",
+      "dst": "test_data/zapdos/image-7.png"
+    },
+    {
+      "kind": "normal",
+      "class": "zubat",
+      "src": "data/zubat/image-7.png",
+      "dst": "test_data/zubat/image-7.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "alakazam",
+      "src": "data/alakazam/image-11.png",
+      "dst": "test_data/alakazam/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "arbok",
+      "src": "data/arbok/image-12.png",
+      "dst": "test_data/arbok/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "arcanine",
+      "src": "data/arcanine/image-10.png",
+      "dst": "test_data/arcanine/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "arcanine",
+      "src": "data/arcanine/image-13.png",
+      "dst": "test_data/arcanine/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "articuno",
+      "src": "data/articuno/image-9.png",
+      "dst": "test_data/articuno/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "beedrill",
+      "src": "data/beedrill/image-10.png",
+      "dst": "test_data/beedrill/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "bellsprout",
+      "src": "data/bellsprout/image-11.png",
+      "dst": "test_data/bellsprout/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "blastoise",
+      "src": "data/blastoise/image-10.png",
+      "dst": "test_data/blastoise/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "bulbasaur",
+      "src": "data/bulbasaur/image-10.png",
+      "dst": "test_data/bulbasaur/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "bulbasaur",
+      "src": "data/bulbasaur/image-11.png",
+      "dst": "test_data/bulbasaur/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "caterpie",
+      "src": "data/caterpie/image-8.png",
+      "dst": "test_data/caterpie/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "chansey",
+      "src": "data/chansey/image-14.png",
+      "dst": "test_data/chansey/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "chansey",
+      "src": "data/chansey/image-9.png",
+      "dst": "test_data/chansey/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "charmander",
+      "src": "data/charmander/image-10.png",
+      "dst": "test_data/charmander/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "charmander",
+      "src": "data/charmander/image-9.png",
+      "dst": "test_data/charmander/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "charmeleon",
+      "src": "data/charmeleon/image-11.png",
+      "dst": "test_data/charmeleon/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "clefable",
+      "src": "data/clefable/image-9.png",
+      "dst": "test_data/clefable/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "clefairy",
+      "src": "data/clefairy/image-13.png",
+      "dst": "test_data/clefairy/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "cloyster",
+      "src": "data/cloyster/image-13.png",
+      "dst": "test_data/cloyster/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "cubone",
+      "src": "data/cubone/image-10.png",
+      "dst": "test_data/cubone/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "dewgong",
+      "src": "data/dewgong/image-11.png",
+      "dst": "test_data/dewgong/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "dewgong",
+      "src": "data/dewgong/image-13.png",
+      "dst": "test_data/dewgong/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "diglett",
+      "src": "data/diglett/image-10.png",
+      "dst": "test_data/diglett/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "ditto",
+      "src": "data/ditto/image-12.png",
+      "dst": "test_data/ditto/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "dragonair",
+      "src": "data/dragonair/image-10.png",
+      "dst": "test_data/dragonair/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "dratini",
+      "src": "data/dratini/image-12.png",
+      "dst": "test_data/dratini/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "drowzee",
+      "src": "data/drowzee/image-13.png",
+      "dst": "test_data/drowzee/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "dugtrio",
+      "src": "data/dugtrio/image-10.png",
+      "dst": "test_data/dugtrio/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "eevee",
+      "src": "data/eevee/image-11.png",
+      "dst": "test_data/eevee/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "electrode",
+      "src": "data/electrode/image-9.png",
+      "dst": "test_data/electrode/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "exeggutor",
+      "src": "data/exeggutor/image-14.png",
+      "dst": "test_data/exeggutor/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "farfetchd",
+      "src": "data/farfetchd/image-11.png",
+      "dst": "test_data/farfetchd/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "fearow",
+      "src": "data/fearow/image-8.png",
+      "dst": "test_data/fearow/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "flareon",
+      "src": "data/flareon/image-11.png",
+      "dst": "test_data/flareon/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "gastly",
+      "src": "data/gastly/image-14.png",
+      "dst": "test_data/gastly/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "geodude",
+      "src": "data/geodude/image-10.png",
+      "dst": "test_data/geodude/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "gloom",
+      "src": "data/gloom/image-12.png",
+      "dst": "test_data/gloom/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "golbat",
+      "src": "data/golbat/image-10.png",
+      "dst": "test_data/golbat/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "goldeen",
+      "src": "data/goldeen/image-13.png",
+      "dst": "test_data/goldeen/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "golduck",
+      "src": "data/golduck/image-14.png",
+      "dst": "test_data/golduck/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "golduck",
+      "src": "data/golduck/image-9.png",
+      "dst": "test_data/golduck/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "golem",
+      "src": "data/golem/image-13.png",
+      "dst": "test_data/golem/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "golem",
+      "src": "data/golem/image-14.png",
+      "dst": "test_data/golem/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "graveler",
+      "src": "data/graveler/image-9.png",
+      "dst": "test_data/graveler/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "grimer",
+      "src": "data/grimer/image-13.png",
+      "dst": "test_data/grimer/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "growlithe",
+      "src": "data/growlithe/image-10.png",
+      "dst": "test_data/growlithe/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "gyarados",
+      "src": "data/gyarados/image-13.png",
+      "dst": "test_data/gyarados/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "gyarados",
+      "src": "data/gyarados/image-14.png",
+      "dst": "test_data/gyarados/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "haunter",
+      "src": "data/haunter/image-11.png",
+      "dst": "test_data/haunter/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "hitmonlee",
+      "src": "data/hitmonlee/image-12.png",
+      "dst": "test_data/hitmonlee/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "horsea",
+      "src": "data/horsea/image-12.png",
+      "dst": "test_data/horsea/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "hypno",
+      "src": "data/hypno/image-10.png",
+      "dst": "test_data/hypno/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "jigglypuff",
+      "src": "data/jigglypuff/image-13.png",
+      "dst": "test_data/jigglypuff/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "jolteon",
+      "src": "data/jolteon/image-11.png",
+      "dst": "test_data/jolteon/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "jolteon",
+      "src": "data/jolteon/image-9.png",
+      "dst": "test_data/jolteon/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "jynx",
+      "src": "data/jynx/image-10.png",
+      "dst": "test_data/jynx/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "kabuto",
+      "src": "data/kabuto/image-10.png",
+      "dst": "test_data/kabuto/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "kabutops",
+      "src": "data/kabutops/image-11.png",
+      "dst": "test_data/kabutops/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "kangaskhan",
+      "src": "data/kangaskhan/image-9.png",
+      "dst": "test_data/kangaskhan/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "krabby",
+      "src": "data/krabby/image-11.png",
+      "dst": "test_data/krabby/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "lapras",
+      "src": "data/lapras/image-12.png",
+      "dst": "test_data/lapras/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "lapras",
+      "src": "data/lapras/image-9.png",
+      "dst": "test_data/lapras/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "lickitung",
+      "src": "data/lickitung/image-12.png",
+      "dst": "test_data/lickitung/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "machoke",
+      "src": "data/machoke/image-12.png",
+      "dst": "test_data/machoke/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "machop",
+      "src": "data/machop/image-10.png",
+      "dst": "test_data/machop/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magikarp",
+      "src": "data/magikarp/image-14.png",
+      "dst": "test_data/magikarp/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magmar",
+      "src": "data/magmar/image-13.png",
+      "dst": "test_data/magmar/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magnemite",
+      "src": "data/magnemite/image-10.png",
+      "dst": "test_data/magnemite/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magnemite",
+      "src": "data/magnemite/image-14.png",
+      "dst": "test_data/magnemite/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magneton",
+      "src": "data/magneton/image-14.png",
+      "dst": "test_data/magneton/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "magneton",
+      "src": "data/magneton/image-9.png",
+      "dst": "test_data/magneton/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "marowak",
+      "src": "data/marowak/image-12.png",
+      "dst": "test_data/marowak/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "meowth",
+      "src": "data/meowth/image-10.png",
+      "dst": "test_data/meowth/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "mew",
+      "src": "data/mew/image-10.png",
+      "dst": "test_data/mew/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "mewtwo",
+      "src": "data/mewtwo/image-13.png",
+      "dst": "test_data/mewtwo/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "moltres",
+      "src": "data/moltres/image-9.png",
+      "dst": "test_data/moltres/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "muk",
+      "src": "data/muk/image-11.png",
+      "dst": "test_data/muk/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "nidoran-f",
+      "src": "data/nidoran-f/image-9.png",
+      "dst": "test_data/nidoran-f/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "nidoran-m",
+      "src": "data/nidoran-m/image-8.png",
+      "dst": "test_data/nidoran-m/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "nidorina",
+      "src": "data/nidorina/image-11.png",
+      "dst": "test_data/nidorina/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "nidorino",
+      "src": "data/nidorino/image-8.png",
+      "dst": "test_data/nidorino/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "oddish",
+      "src": "data/oddish/image-11.png",
+      "dst": "test_data/oddish/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "onix",
+      "src": "data/onix/image-12.png",
+      "dst": "test_data/onix/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "paras",
+      "src": "data/paras/image-12.png",
+      "dst": "test_data/paras/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "parasect",
+      "src": "data/parasect/image-11.png",
+      "dst": "test_data/parasect/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "persian",
+      "src": "data/persian/image-13.png",
+      "dst": "test_data/persian/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "pidgeotto",
+      "src": "data/pidgeotto/image-8.png",
+      "dst": "test_data/pidgeotto/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "pikachu",
+      "src": "data/pikachu/image-11.png",
+      "dst": "test_data/pikachu/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "pinsir",
+      "src": "data/pinsir/image-8.png",
+      "dst": "test_data/pinsir/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "poliwag",
+      "src": "data/poliwag/image-11.png",
+      "dst": "test_data/poliwag/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "poliwag",
+      "src": "data/poliwag/image-9.png",
+      "dst": "test_data/poliwag/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "poliwrath",
+      "src": "data/poliwrath/image-13.png",
+      "dst": "test_data/poliwrath/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "poliwrath",
+      "src": "data/poliwrath/image-9.png",
+      "dst": "test_data/poliwrath/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "porygon",
+      "src": "data/porygon/image-12.png",
+      "dst": "test_data/porygon/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "primeape",
+      "src": "data/primeape/image-10.png",
+      "dst": "test_data/primeape/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "raichu",
+      "src": "data/raichu/image-14.png",
+      "dst": "test_data/raichu/image-14.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "raticate",
+      "src": "data/raticate/image-9.png",
+      "dst": "test_data/raticate/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "rattata",
+      "src": "data/rattata/image-8.png",
+      "dst": "test_data/rattata/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "rhydon",
+      "src": "data/rhydon/image-11.png",
+      "dst": "test_data/rhydon/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "sandshrew",
+      "src": "data/sandshrew/image-13.png",
+      "dst": "test_data/sandshrew/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "sandslash",
+      "src": "data/sandslash/image-12.png",
+      "dst": "test_data/sandslash/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "scyther",
+      "src": "data/scyther/image-10.png",
+      "dst": "test_data/scyther/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "seadra",
+      "src": "data/seadra/image-11.png",
+      "dst": "test_data/seadra/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "seaking",
+      "src": "data/seaking/image-8.png",
+      "dst": "test_data/seaking/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "seel",
+      "src": "data/seel/image-11.png",
+      "dst": "test_data/seel/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "shellder",
+      "src": "data/shellder/image-12.png",
+      "dst": "test_data/shellder/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "slowpoke",
+      "src": "data/slowpoke/image-13.png",
+      "dst": "test_data/slowpoke/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "spearow",
+      "src": "data/spearow/image-13.png",
+      "dst": "test_data/spearow/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "starmie",
+      "src": "data/starmie/image-8.png",
+      "dst": "test_data/starmie/image-8.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "tauros",
+      "src": "data/tauros/image-13.png",
+      "dst": "test_data/tauros/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "tauros",
+      "src": "data/tauros/image-9.png",
+      "dst": "test_data/tauros/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "tentacool",
+      "src": "data/tentacool/image-11.png",
+      "dst": "test_data/tentacool/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "venomoth",
+      "src": "data/venomoth/image-10.png",
+      "dst": "test_data/venomoth/image-10.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "venonat",
+      "src": "data/venonat/image-13.png",
+      "dst": "test_data/venonat/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "voltorb",
+      "src": "data/voltorb/image-13.png",
+      "dst": "test_data/voltorb/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "vulpix",
+      "src": "data/vulpix/image-9.png",
+      "dst": "test_data/vulpix/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "wartortle",
+      "src": "data/wartortle/image-12.png",
+      "dst": "test_data/wartortle/image-12.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "wartortle",
+      "src": "data/wartortle/image-13.png",
+      "dst": "test_data/wartortle/image-13.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "weedle",
+      "src": "data/weedle/image-11.png",
+      "dst": "test_data/weedle/image-11.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "weepinbell",
+      "src": "data/weepinbell/image-9.png",
+      "dst": "test_data/weepinbell/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "weezing",
+      "src": "data/weezing/image-9.png",
+      "dst": "test_data/weezing/image-9.png"
+    },
+    {
+      "kind": "shiny_twin",
+      "class": "wigglytuff",
+      "src": "data/wigglytuff/image-9.png",
+      "dst": "test_data/wigglytuff/image-9.png"
+    }
+  ]
+}

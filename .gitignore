@@ -13,3 +13,6 @@ weights/*
 .similarity-cache.npz
 .dinov2-cache/
 .cnn-probe-cache/
+# On-disk seed-42 test split (scripts/create_test_split.py). Images never go in
+# git; test_split_manifest.json records exactly which files were moved.
+test_data/
