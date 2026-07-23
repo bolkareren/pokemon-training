@@ -84,6 +84,7 @@ and none of its numbers are comparable to anything here.
 | SDT input channel? | **consistent, not independently confirmed**. Original: +1.5pt over 4 paired seeds (t=2.86, p=0.01). On corrected folds, one paired seed gives **+1.08pt at 0.64× SEM** (3/5 folds, paired t=0.789 p=0.47; McNemar 66 fixed / 54 broken, p=0.32). That sits inside the original per-seed range (+0.4…+2.6), so it replicates in direction and magnitude but cannot confirm alone — **a +1.5pt effect is not detectable in a single run** (2× SEM ≈ 3.4pt here). Default stands; full re-confirmation needs 3 more paired seeds (~3h) | n2-*sdt*, p6-ref-26 vs p6-allmask-26 |
 | curvature proxy channel? | dead — too sparse (1-3px slivers) to survive the stem's 4× downsample; diagnosis motivates "edge" and the stem phase | n2-curv, n2-sdt-curv |
 | edge channel? | retired — dilutes SDT (−2.6pt, 5/5 folds); alone +0.65pt at 0.4× SEM | p1-* |
+| single-channel stem (does a trainable stem replace the hand-designed channels)? | **no — the 3-channel encoding is load-bearing even at full unfreeze.** The sharpest test of the input-encoding reopen: with conv1/bn1/layer1 now trainable, can the stem learn from a raw mask what `(mask,sdt,mask)` supplies? `conv1` is rebuilt to 1 input channel, re-seeded by **summing the pretrained RGB filters** (`model.adapt_input_channels`; `input_channels` is now variable-length). 3-seed paired batteries vs `p10-lastn6-s*`: **mono-mask −1.17pt** (−1.08/−1.80/−0.63, 15-fold t=−2.12 p=0.052, McNemar 177 fixed / 216 broke net −39 p=0.055 — under the 2× bar but real-signed, all 3 seeds negative) and **mono-sdt −3.18pt** (t=−5.56 **p=0.0001**, McNemar net −106 **p<1e-5**, 13/15 folds negative — clears the bar). Ordering **3-channel > mono-mask > mono-sdt**: raw mask is the better single channel by ~2pt, so if forced to one, keep the crisp binary boundary. **SDT is a complement, not a substitute** — the confirmed-useful *added* channel is the *worst* one alone, carrying value only next to a sharp mask edge. Phase 1's "fill it" stands; "drop the redundant capacity" refuted. Default unchanged | p13-mono-{mask,sdt}-s* |
 | LR schedule? | **+5.1pt confirmed at 2 seeds**: cosine+warmup+restore at blr 4e-4; the historical 4e-4 collapse was a warmup artifact. Effect is larger than the fold artifact, so likely robust — but see the horizon row, which did not survive | p2-* |
 | epoch horizon? | **resolved — flat, default flipped 32 → 26.** 3-seed paired battery on index folds: 32ep is **+0.45pt over 26ep** (+1.71/+0.63/−0.99), 15-fold paired t=0.83 p=0.42, McNemar net +15 p=0.40 — indistinguishable. The seed-42 +1.71pt washed out across seeds (the single-seed mirage again). Per the pre-registered rule, **`epochs` default lowered to 26** for ~20% cheaper runs at the same accuracy | p9-ep32-s*, p7-ref-26-s* |
 | higher backbone LR? | no — blr 8e-4 is +0.4pt at 0.3× SEM; the LR ceiling does not extend past 4e-4. Phase 2 schedule residue closed on this axis | p5-blr8e4 |
@@ -226,17 +227,23 @@ wd null at 3 seeds p=0.74; the LR schedule tuned at lastN 3 survived the regime
 change). So the optimizer/regularization side of the reopened region is spent.
 In priority order:
 
-1. **Input-encoding re-exploration** — the conceptually strongest reopen. Full
-   unfreeze moved the freeze boundary to the input: at lastN 3 the stem
-   (conv1/bn1) and layer1 were frozen ImageNet filters, so *every* Phase-1/3
-   channel/stem finding (edge dilutes SDT, channel-position matters, curv dies,
-   `(mask,sdt,mask)` winner) was a statement about a fixed natural-image stem —
-   a constraint now gone. Re-test with a **trainable** stem: single-channel stem
-   (does the net still need hand-designed SDT/mask, or learn equivalents from raw
-   mask?), edge channel redux, channel-position/dup-mask. Cheap; the ground is
-   genuinely new. Down-weight curv (its failure was stem *downsampling*, not
-   frozen weights — a trainable stem doesn't add resolution). Multi-seed paired
-   vs `p10-lastn6-s*`.
+1. **Input-encoding re-exploration** — the conceptually strongest reopen, now
+   **partly answered and looking weaker than hoped**. Full unfreeze moved the
+   freeze boundary to the input: at lastN 3 the stem (conv1/bn1) and layer1 were
+   frozen ImageNet filters, so *every* Phase-1/3 channel/stem finding was a
+   statement about a fixed natural-image stem — a constraint now gone. The
+   sharpest question is **closed negative**: the single-channel stem loses
+   (mono-mask −1.17pt, mono-sdt −3.18pt), so a trainable stem does *not* learn to
+   replace the hand-designed channels and `(mask,sdt,mask)` is load-bearing.
+   That lowers the prior on the rest of the cluster, which now reads as
+   "close the checklist, expect a null": **edge channel redux** and
+   **channel-position/dup-mask** (`(sdt,mask,sdt)`). Down-weight curv (its
+   failure was stem *downsampling*, not frozen weights — a trainable stem doesn't
+   add resolution). Multi-seed paired vs `p10-lastn6-s*`.
+   - Worth folding in here: **re-confirm SDT itself** (currently "consistent, not
+     independently confirmed" on corrected folds; needs 3 paired seeds). The p13
+     result raises its prior — SDT alone is the *worst* single channel, so its
+     value is specifically as a complement, which is what the +1.5pt claims.
 2. **Remaining Phase 5 items**: optimizer (AdamW never swept against SGD/Adam,
    though SGD needs its own LR), bigger/deeper backbone (the depth-of-fine-tuning
    monotonicity raises the prior that raw capacity now pays — resnet101, but run
@@ -452,8 +459,15 @@ In rough value order; each is cheap and uses whatever config Phases 1-4 settle:
       Paired with the LR result (4e-4 settled, both neighbors worse, 1e-3 −2.9pt
       >2× SEM), **the full-unfreeze lr/wd region is validated-null — defaults
       stand.** See the results-table row.
-- [ ] **single-channel stem** — sum pretrained RGB filters; "drop the
-      redundant capacity" vs Phase 1's "fill it".
+- [x] **single-channel stem** — **done, negative; "fill it" wins.** Implemented
+      as designed (sum the pretrained RGB filters into a 1-channel conv1,
+      `model.adapt_input_channels`; `input_channels` generalized to variable
+      length, default path byte-identical). 3-seed paired batteries: mono-mask
+      **−1.17pt** (p=0.052, all seeds negative, under the 2× bar but real-signed),
+      mono-sdt **−3.18pt** (p=0.0001, clears the bar). A trainable stem does *not*
+      learn to replace the hand-designed channels, and SDT alone is the worst
+      option despite being the useful *added* channel — it complements a sharp
+      mask edge rather than substituting for it. See the results-table row.
 - [ ] **duplicate-mask hypothesis** — is the second raw mask copy in the
       winning `(mask, sdt, mask)` load-bearing? Channel-position swaps,
       e.g. `(sdt, mask, sdt)`. See the Phase 1 pattern note.

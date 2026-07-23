@@ -20,9 +20,12 @@ any experiment — it holds the protocol, all measured results, and the active
 roadmap. The full-unfreeze optimizer follow-ups are now both closed as null (BN
 affine `p11-bnaffine-s*`; the `backbone_lr`/`weight_decay` re-tune `p12-lrwd-*` —
 LR settled at 4e-4, wd null at 3 seeds, defaults stand). Next up (its "Next
-session" section): **input-encoding re-exploration** — full unfreeze made the
-stem trainable, so the Phase-1/3 channel/stem nulls (edge, channel-position,
-single-channel stem) were all measured against a frozen ImageNet stem and reopen.
+session" section): the tail of the **input-encoding re-exploration**. Its sharpest
+question is already closed negative — the single-channel stem loses (mono-mask
+−1.17pt, mono-sdt −3.18pt, `p13-mono-*`), so a trainable stem does *not* learn to
+replace the hand-designed channels and `(mask, sdt, mask)` is load-bearing. What
+remains (edge redux, channel-position/dup-mask, re-confirming SDT) is now
+low-prior checklist-closing, not an expected win.
 
 ## Workflow
 
