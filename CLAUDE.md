@@ -9,7 +9,19 @@ silhouettes, for a "Who's That Pokémon?" style guessing game. Sprites are
 scraped from pokemondb.net, converted to silhouettes, and used to fine-tune a
 torchvision backbone.
 
-**Current reference: 0.7586 out-of-fold accuracy** (single model, 5-fold grouped
+**FINAL RESULT (Phase 6 complete): 0.8325 top-1 / 0.9442 top-5** on the 197-image
+held-out test split (Wilson 95% CI [0.774, 0.878]) — a 15-model fold×seed ensemble
+combined by mean softmax with 6-view TTA. Decomposition: 0.7643 single-model OOF
+→ +1.38pt TTA → +4.74pt ensembling. The test split lives on disk in `test_data/`
+and is **spent**; anything learned from it is a new hypothesis, not a tuning
+signal. See EXPERIMENTS.md Phase 6.
+
+**Exploration reference: 0.7643 out-of-fold accuracy** (single model, 5-fold
+grouped CV on the post-split fold structure, `p14-ref-extsplit-s*`). The older
+0.7604/0.7586 figures below predate the on-disk split and are **not** comparable
+to it — fold composition changed.
+
+**Historical reference: 0.7586 out-of-fold accuracy** (single model, 5-fold grouped
 CV, n=1110, config defaults at seed 42 on index-grouped folds; 3-seed spread
 0.7586/0.7676/0.7550, mean 0.7604 — `p10-lastn6-s*`). The defaults are the SDT
 input channel, cosine/warmup/restore-best at blr 4e-4 over 26 epochs, and

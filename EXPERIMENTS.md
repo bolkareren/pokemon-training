@@ -501,14 +501,59 @@ Ensembling stays out of exploration (it multiplies every experiment's cost and
 judges later changes as ensembles, which is not how they'd ship). At the end,
 on the settled config:
 
-- [ ] **Seed ensemble within each fold** and/or **TTA** (identity + hflip +
-      small rotations) — valid on OOF data.
-- [ ] **Fold ensemble on the held-out test split only.** Averaging the K fold
-      models against `oof_predictions.json` is leakage: each image is
-      out-of-fold for exactly one model, in-training for K−1 — the shiny
-      mistake from the opposite direction.
-- [ ] **One-shot test evaluation** — never-touched 15% split, binomial CI,
-      no tuning afterwards; anything learned becomes a new hypothesis.
+**PHASE 6 COMPLETE. Final: 0.8325 top-1 / 0.9442 top-5 on the held-out split.**
+
+- [x] **On-disk test split** — `scripts/create_test_split.py` moved the 197
+      seed-42 test normals *and their 122 shiny recolours* (319 files) to
+      `test_data/`, so the guarantee is physical rather than dependent on
+      `exclude_shiny=True`. `config.test_dir` makes all of `data/` the CV pool;
+      omitting it now raises rather than silently carving a second split.
+      Fold composition changed, so the reference was re-baselined:
+      **0.7643** (`p14-ref-extsplit-s*`, 0.7658/0.7577/0.7694), replacing 0.7604.
+- [x] **TTA — done, the win.** `scripts/tta_selection.py`, OOF-valid (each fold's
+      model on its *own* val fold only). **All six views (identity + hflip +
+      rot±10 + rot±20): +1.38pt, 0.7643 → 0.7781, paired t=+5.60 p=0.0001,
+      14/15 folds up.** The mechanism is **decorrelation, not per-view quality**:
+      rotations are inside the training distribution (`affine_degrees=20`), so
+      they correlate with identity and add little alone (4v rot-only +0.57pt,
+      p=0.11 — the view-count control that rules out "more views is all that
+      matters"). hflip is *out*-of-distribution and null on its own at 50% weight
+      (−0.06pt, p=0.86), but its errors are decorrelated, so diluted across six
+      views it is what makes the set win. Estimate is selection-optimistic over 7
+      comparisons.
+- [x] **Fold × seed ensemble on the held-out test split only** — 15 models
+      (3 seeds × 5 folds), combined by **arithmetic mean of softmax** (not logits:
+      logit-averaging is a geometric mean, so one confidently-wrong member can veto
+      a class). **+4.74pt over the mean member on the same images (0.7851 →
+      0.8325)** — the gain that was unmeasurable before the spend, and larger than
+      TTA's. Per-fold checkpoints come from `--save-model` (`weights/<run>/foldN.pt`).
+- [x] **One-shot test evaluation** — `scripts/final_test_evaluation.py`, 197
+      never-trained images. **top-1 0.8325 [0.7741, 0.8782], top-3 0.9239,
+      top-5 0.9442** (Wilson 95%). 33 errors. The CI is ±5pt: this is one split,
+      not a precise number.
+
+**Error studies on the ensemble** (both reused verbatim from the confusion study,
+since they are class-level properties):
+- **Evolution-line confusions survive ensembling and remain the dominant
+  structured error**: 4/33 errors (12.1%) at **13× chance**, essentially unchanged
+  from the single model's 12.7% / 15×. (`raichu→pikachu`, `pidgeot→pidgeotto`,
+  `kadabra→alakazam`, `dewgong→seel`.)
+- **Silhouette collisions have stopped mattering**: confused pairs average IoU
+  0.710 vs 0.699 for a random class pair — **1.02× lift, i.e. no signal** — and
+  **zero errors at IoU ≥ 0.9**. electrode/voltorb (IoU 0.969, the worst collision
+  in the dataset) is now answered correctly. For a single model this explained ~3%
+  of errors; the ensemble absorbed that class of mistake.
+
+**Ensemble-only findings — these are NEW HYPOTHESES generated on spent test data,
+not validated results. Acting on them requires measuring on OOF or fresh data.**
+- **Unanimity is perfect.** All 15 members agree on 50.8% of images (100/197) and
+  are **100.0% accurate there**; all 33 errors fall in the 97 disagreement cases
+  (66.0% accurate). 
+- **Confidence is sharply calibrated and monotonic**: 42.5% → 76.9% → 97.4% →
+  100% → 100% across ascending max-probability bins. Above ~0.34 the ensemble is
+  essentially never wrong. For the guessing game this is the practical payoff —
+  the averaged softmax is a real reliability signal, so the app can tell when to
+  commit versus hedge.
 
 ---
 
