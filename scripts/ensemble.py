@@ -33,13 +33,23 @@ from scripts.training import build_model_and_optimizer
 WEIGHTS_DIR = PROJECT_ROOT / "weights"
 
 # Test-time augmentation. Silhouettes are contour-only, so the useful views are
-# mirror and small rotations; scale/crop jitter would fight the framing the model
-# was trained on. "identity" alone reproduces the plain ensemble.
+# mirror and rotations; scale/crop jitter would fight the framing the model was
+# trained on. "identity" alone reproduces the plain ensemble.
+#
+# Measured on OOF (scripts/tta_selection.py): what TTA buys here is *decorrelation*,
+# not per-view quality. Rotations sit inside the training distribution
+# (affine_degrees=20) and correlate strongly with identity, so they add little on
+# their own (+0.57pt, p=0.11 at 4 views). hflip is out-of-distribution - the model
+# never trains on mirrored silhouettes - and is null on its own at 50% weight
+# (-0.06pt), yet its errors are decorrelated from identity's, so diluted across six
+# views it is what makes the set win. All six: +1.38pt OOF, p=0.0001, 14/15 folds.
 TTA_VIEWS = {
 	"identity": lambda x: x,
 	"hflip": lambda x: torch.flip(x, dims=[-1]),
 	"rot+10": lambda x: TF.rotate(x, 10.0),
 	"rot-10": lambda x: TF.rotate(x, -10.0),
+	"rot+20": lambda x: TF.rotate(x, 20.0),
+	"rot-20": lambda x: TF.rotate(x, -20.0),
 }
 
 
@@ -114,6 +124,23 @@ def report(probabilities, labels, prefix=""):
 		f"{prefix}top3": top_k_accuracy_from_predictions(top5, labels, k=3),
 		f"{prefix}top5": top_k_accuracy_from_predictions(top5, labels, k=5),
 	}
+
+
+def fold_loaders_for(config, data_dir, test_dir, seed):
+	"""The fold split a checkpointed run used - rebuilt with that run's seed, so
+	fold_loaders[k] is exactly the split fold<k>.pt was trained and validated on."""
+	fold_loaders, _test, classes = create_fold_data_loaders(
+		data_dir=data_dir,
+		folds=config.folds or 5,
+		test_size=config.test_size,
+		batch_size=config.batch_size,
+		random_state=seed,
+		exclude_shiny=config.exclude_shiny,
+		group_aware=config.group_aware_folds,
+		augmentations=config.augmentations,
+		test_dir=test_dir,
+	)
+	return fold_loaders, classes
 
 
 def build_test_loader(config, data_dir, test_dir):
