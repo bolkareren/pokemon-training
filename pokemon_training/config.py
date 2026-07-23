@@ -16,6 +16,10 @@ class ExperimentConfig:
 	# out by `test_size` - the Phase 6 guarantee that test images cannot leak into
 	# ensembling. Fold mode only. `test_size` is ignored in this mode.
 	test_dir: Path | None = None
+	# Escape hatch: carve a test split out of data_dir even though test_data/
+	# exists on disk. Off by default so the incoherent combination raises rather
+	# than silently shrinking the CV pool. See data._guard_on_disk_test_split.
+	allow_carved_test: bool = False
 	batch_size: int = 16
 	# Both must stay >= 0.15: a smaller split has fewer images than the 151
 	# classes and the stratified split raises.

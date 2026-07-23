@@ -464,6 +464,28 @@ def create_datasets(
 	return train_dataset, val_dataset, test_dataset, base_dataset.classes
 
 
+ON_DISK_TEST_DIR = PROJECT_ROOT / "test_data"
+
+
+def _guard_on_disk_test_split(test_dir, allow_carved_test):
+	"""Refuse to silently carve a test split when one already exists on disk.
+
+	Once scripts/create_test_split.py has run, `data_dir` holds only the pool.
+	Carving another `test_size` out of it would shrink the CV pool, invent a
+	second test set from training data, and leave the real test_data/ untouched -
+	all without an error, the same silent-failure shape as omitting --folds 5.
+	"""
+	if test_dir is not None or allow_carved_test:
+		return
+	if ON_DISK_TEST_DIR.exists() and any(ON_DISK_TEST_DIR.iterdir()):
+		raise ValueError(
+			f"{ON_DISK_TEST_DIR.name}/ exists (on-disk test split) but test_dir is unset, "
+			"so a second test split would be carved out of the pool and the real test set "
+			"ignored. Pass --test-dir test_data (the intended use), or --allow-carved-test "
+			"to deliberately carve a split from data/ anyway."
+		)
+
+
 def create_fold_data_loaders(
 	data_dir,
 	folds,
@@ -475,6 +497,7 @@ def create_fold_data_loaders(
 	include_pose_variants=False,
 	augmentations=None,
 	test_dir=None,
+	allow_carved_test=False,
 ):
 	"""Cross-validation loaders; the test split is carved out first and stays
 	untouched. Each fold is (train_loader, val_loader, val_idx), val_idx
@@ -489,6 +512,7 @@ def create_fold_data_loaders(
 	"""
 	if include_pose_variants and not exclude_shiny:
 		raise ValueError("include_pose_variants requires exclude_shiny=True")
+	_guard_on_disk_test_split(test_dir, allow_carved_test)
 
 	train_transform, test_transform = get_transforms(**(augmentations or {}))
 	base_dataset = load_dataset(data_dir)
@@ -567,7 +591,11 @@ def create_data_loaders(
 	random_state=42,
 	exclude_shiny=True,
 	augmentations=None,
+	allow_carved_test=False,
 ):
+	# The single-split path has no external-test mode, so an on-disk split is
+	# always incoherent here unless explicitly opted out of.
+	_guard_on_disk_test_split(None, allow_carved_test)
 	train_dataset, val_dataset, test_dataset, classes = create_datasets(
 		data_dir=data_dir,
 		val_size=val_size,

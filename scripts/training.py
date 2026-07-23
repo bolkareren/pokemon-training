@@ -78,6 +78,7 @@ def run_cross_validation(config, data_dir, weights_checkpoint, device):
 		folds=config.folds,
 		test_size=config.test_size,
 		test_dir=config.test_dir,
+		allow_carved_test=config.allow_carved_test,
 		batch_size=config.batch_size,
 		random_state=config.random_state,
 		exclude_shiny=config.exclude_shiny,
@@ -239,6 +240,7 @@ def main(config: ExperimentConfig) -> None:
 				random_state=config.random_state,
 				exclude_shiny=config.exclude_shiny,
 				augmentations=config.augmentations,
+				allow_carved_test=config.allow_carved_test,
 			)
 			print(f"train_batches: {len(train_loader)}")
 			print(f"validation_batches: {len(val_loader)}")
